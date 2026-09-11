@@ -1,0 +1,14 @@
+# État local de la CLI Supabase : propre à chaque poste, jamais versionné.
+# Normalement créé par `supabase init` ; l'arborescence ayant été écrite à la
+# main au sprint 1, ce fichier l'a été aussi.
+#
+# `.temp/` contient la référence du projet lié, l'URL du pooler et les versions
+# des services. Pas de secret, mais du bruit qui changerait à chaque `db push`
+# et entrerait en conflit entre deux machines.
+.branches
+.temp
+
+# Par sécurité : aucun fichier d'environnement ne doit remonter d'ici.
+.env
+.env.local
+.env.*.local
