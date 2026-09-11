@@ -57,7 +57,14 @@ export function AddOptionInline({
   }
 
   const onSubmit = handleSubmit(async (values) => {
-    await onAdd({ title: values.title, url: values.url === '' ? null : values.url })
+    try {
+      await onAdd({ title: values.title, url: values.url === '' ? null : values.url })
+    } catch {
+      // L'appelant affiche déjà le message. On garde le formulaire ouvert et
+      // rempli : sans ce `catch`, le rejet remonterait non géré et la saisie
+      // serait perdue.
+      return
+    }
     reset()
     setOpen(false)
   })
