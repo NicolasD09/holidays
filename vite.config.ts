@@ -21,6 +21,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // Bornée à `src` : les tests de sécurité vivent dans `supabase/tests/` et
+    // parlent à un vrai projet Supabase. Ils ont leur propre configuration
+    // (`vitest.security.config.ts`) pour que `npm run test` reste hors réseau.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       include: ['src/lib/**/*.ts'],
