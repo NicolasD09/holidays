@@ -1,111 +1,149 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Thème sombre : par défaut le système décide. La classe `.dark` (ou `.light`)
+   posée sur <html> permet de forcer, pour un futur sélecteur de thème. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   Jetons de couleur — doc 05 §5.2
+   Le sens n'est jamais porté par la seule couleur : chaque état
+   de vote associe toujours une icône et un libellé.
+   ───────────────────────────────────────────────────────────── */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --surface: oklch(0.993 0.004 200);
+  --surface-2: oklch(0.965 0.008 200);
+  --text: oklch(0.24 0.02 235);
+  --text-muted: oklch(0.5 0.017 235);
+  --border: oklch(0.9 0.011 220);
+  /* Bordure porteuse de sens (champs, boutons contour) : ≥ 3:1 sur --surface.
+     Distincte de --border, décorative, qui sépare sans rien signifier. */
+  --border-strong: oklch(0.56 0.02 230);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --brand: oklch(0.47 0.1 200);
+  --brand-hover: oklch(0.42 0.1 200);
+  --brand-fg: oklch(0.99 0.005 200);
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --yes: oklch(0.48 0.13 150);
+  --maybe: oklch(0.52 0.12 75);
+  --no: oklch(0.52 0.16 25);
+  --vote-fg: oklch(0.99 0.005 200);
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --ring: oklch(0.55 0.12 200);
+  --radius-card: 0.75rem;
+  --radius-control: 0.625rem;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+  :root:not(.light) {
+    --surface: oklch(0.19 0.018 235);
+    --surface-2: oklch(0.24 0.022 235);
+    --text: oklch(0.95 0.008 220);
+    --text-muted: oklch(0.72 0.014 220);
+    --border: oklch(0.33 0.02 230);
+    --border-strong: oklch(0.62 0.02 230);
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
+    --brand: oklch(0.74 0.1 197);
+    --brand-hover: oklch(0.8 0.1 197);
+    --brand-fg: oklch(0.19 0.018 235);
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
+    --yes: oklch(0.75 0.14 150);
+    --maybe: oklch(0.82 0.13 78);
+    --no: oklch(0.72 0.15 25);
+    --vote-fg: oklch(0.19 0.018 235);
 
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    --ring: oklch(0.74 0.1 197);
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+.dark {
+  --surface: oklch(0.19 0.018 235);
+  --surface-2: oklch(0.24 0.022 235);
+  --text: oklch(0.95 0.008 220);
+  --text-muted: oklch(0.72 0.014 220);
+  --border: oklch(0.33 0.02 230);
+  --border-strong: oklch(0.62 0.02 230);
+
+  --brand: oklch(0.74 0.1 197);
+  --brand-hover: oklch(0.8 0.1 197);
+  --brand-fg: oklch(0.19 0.018 235);
+
+  --yes: oklch(0.75 0.14 150);
+  --maybe: oklch(0.82 0.13 78);
+  --no: oklch(0.72 0.15 25);
+  --vote-fg: oklch(0.19 0.018 235);
+
+  --ring: oklch(0.74 0.1 197);
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-yes: var(--yes);
+  --color-maybe: var(--maybe);
+  --color-no: var(--no);
+  --color-vote-fg: var(--vote-fg);
+  --color-ring: var(--ring);
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface text-text font-sans antialiased;
+    /* 16px minimum : jamais moins de 15px sur mobile (doc 05 §5.2) */
+    font-size: 1rem;
+    line-height: 1.5;
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  /* Focus toujours visible, jamais supprimé (doc 05 §5.5) */
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 }
-p {
-  margin: 0;
-}
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
