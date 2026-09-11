@@ -39,3 +39,93 @@ jobs:
       - name: Budget de performance
         # doc 04 §4.10 — le JS initial doit rester sous 200 Ko gzip.
         run: node scripts/check-bundle-size.mjs
+
+  rls:
+    name: Contrôles RLS (Postgres jetable)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      # doc 04 §4.7 — les policies sont vérifiées sur une base nue, sans Docker
+      # ni secret : cette barrière est donc toujours active, y compris sur une
+      # PR venue d'un fork. Le harnais rejoue les migrations puis attaque la RLS
+      # depuis le rôle `authenticated`, comme un navigateur.
+      - name: Migrations + contrôles RLS
+        # Invoqué via `bash` : le bit exécutable ne survit pas à un commit
+        # depuis Windows, et un `permission denied` en CI serait incompréhensible.
+        run: bash ./supabase/tests/local/run.sh
+
+  securite:
+    name: Tests de sécurité (holidays-dev)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # doc 04 §4.7 — non négociables avant toute mise en ligne. Les tests
+      # parlent à `holidays-dev` avec les droits d'un navigateur. Sans les deux
+      # secrets, ils s'annoncent ignorés au lieu d'échouer : c'est ce qui permet
+      # à une PR venue d'un fork de rester lisible.
+      - name: RLS
+        run: npm run test:security
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_DEV_PUBLISHABLE_KEY }}
+
+  e2e:
+    name: Parcours complet (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # WebKit d'abord : c'est le moteur de Safari iOS, là où ça casse
+      # (doc 08 §8.5).
+      - name: Installer les navigateurs
+        run: npx playwright install --with-deps webkit chromium
+
+      # Comme la suite de sécurité, le parcours parle au vrai `holidays-dev` :
+      # sans les secrets, il s'annonce ignoré plutôt que rouge.
+      - name: Parcours complet
+        run: npx playwright test
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_DEV_PUBLISHABLE_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

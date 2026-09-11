@@ -21,6 +21,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // `lib/supabase.ts` refuse de démarrer sans configuration — c'est voulu en
+    // production. Les tests de composants n'appellent jamais le réseau (les
+    // modules `api/` sont remplacés), mais le client doit pouvoir s'instancier.
+    env: {
+      VITE_SUPABASE_URL: 'http://localhost:54321',
+      VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_pour_les_tests',
+    },
     // Bornée à `src` : les tests de sécurité vivent dans `supabase/tests/` et
     // parlent à un vrai projet Supabase. Ils ont leur propre configuration
     // (`vitest.security.config.ts`) pour que `npm run test` reste hors réseau.
