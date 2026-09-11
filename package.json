@@ -16,9 +16,12 @@
     "test:security": "vitest run --config vitest.security.config.ts",
     "db:link": "supabase link",
     "db:push": "supabase db push",
-    "db:types": "supabase gen types typescript --linked > src/types/database.ts"
+    "db:types": "supabase gen types typescript --linked > src/types/database.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-slot": "^1.3.3",
     "@supabase/supabase-js": "^2.116.0",
     "@tanstack/react-query": "^5.102.8",
@@ -27,11 +30,14 @@
     "lucide-react": "^1.45.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-hook-form": "^7.87.0",
     "react-router": "^8.3.1",
     "sonner": "^2.0.8",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
