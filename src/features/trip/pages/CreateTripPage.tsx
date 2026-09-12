@@ -6,9 +6,14 @@ import { useNavigate } from 'react-router'
 import { z } from 'zod'
 import { PageShell } from '@/components/common/PageShell'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { createTrip } from '@/features/trip/api/createTrip'
+import {
+  defaultCategorySelection,
+  toCategoryDrafts,
+  type CategorySelection,
+} from '@/features/trip/components/category-catalogue'
+import { CategoryPicker } from '@/features/trip/components/CategoryPicker'
 import { EmojiPicker } from '@/features/trip/components/EmojiPicker'
 import { ShareSheet } from '@/features/trip/components/ShareSheet'
 import { toUserMessage } from '@/lib/errors'
@@ -46,6 +51,10 @@ export function CreateTripPage() {
   const navigate = useNavigate()
   const [emoji, setEmoji] = useState('🏖️')
   const [createdSlug, setCreatedSlug] = useState<string | null>(null)
+  const [categories, setCategories] = useState<CategorySelection>(
+    defaultCategorySelection,
+  )
+  const [categoryError, setCategoryError] = useState<string | null>(null)
 
   const {
     register,
@@ -59,14 +68,41 @@ export function CreateTripPage() {
 
   const create = useMutation({
     mutationFn: (values: FormValues) =>
-      createTrip({ title: values.title, emoji, displayName: values.displayName }),
+      createTrip({
+        title: values.title,
+        emoji,
+        displayName: values.displayName,
+        categories: toCategoryDrafts(categories),
+      }),
     onSuccess: (trip) => setCreatedSlug(trip.slug),
   })
+
+  /**
+   * Le sélecteur de catégories vit hors de react-hook-form : son état n'est
+   * pas un champ mais une petite structure. Sa seule règle de validation —
+   * une catégorie libre cochée doit porter un nom — est donc vérifiée ici.
+   */
+  function validateCategories(): boolean {
+    if (!categories.custom.enabled) return true
+    const label = categories.custom.label.trim()
+    if (!label) {
+      setCategoryError(labels.create.errorCustomLabelRequired)
+      return false
+    }
+    if (label.length > 60) {
+      setCategoryError(labels.create.errorCustomLabelTooLong)
+      return false
+    }
+    return true
+  }
 
   // En cas d'échec réseau, le formulaire conserve sa saisie et propose de
   // réessayer (doc 05 §5.3) : on ne réinitialise rien, on relance la mutation
   // avec les mêmes valeurs.
-  const onSubmit = handleSubmit((values) => create.mutate(values))
+  const onSubmit = handleSubmit((values) => {
+    if (!validateCategories()) return
+    create.mutate(values)
+  })
 
   return (
     <PageShell className="flex flex-col gap-8">
@@ -108,12 +144,15 @@ export function CreateTripPage() {
 
         <div className="flex flex-col gap-2">
           <span className="font-medium">{labels.create.categoryLabel}</span>
-          <Card>
-            <CardTitle className="text-base">🌍 {labels.create.categoryFixed}</CardTitle>
-            <CardBody className="mt-1 text-[0.9375rem]">
-              {labels.create.categoryFixedHint}
-            </CardBody>
-          </Card>
+          <p className="text-sm text-text-muted">{labels.create.categoryHint}</p>
+          <CategoryPicker
+            value={categories}
+            onChange={(next) => {
+              setCategories(next)
+              setCategoryError(null)
+            }}
+            error={categoryError ?? undefined}
+          />
         </div>
 
         <div className="flex flex-col gap-2">

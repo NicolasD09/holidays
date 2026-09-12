@@ -12,6 +12,8 @@ import { addOption, listOptions } from '@/features/voting/api/options'
 import { fetchMyVotes } from '@/features/voting/api/votes'
 import { AddOptionInline } from '@/features/voting/components/AddOptionInline'
 import { approvalLabel } from '@/features/voting/components/approval-choices'
+import { CategoryNav } from '@/features/voting/components/CategoryNav'
+import { isChoiceMode, remainingChoices } from '@/features/voting/components/choice-modes'
 import { OptionCard } from '@/features/voting/components/OptionCard'
 import { useVote } from '@/features/voting/hooks/useVote'
 import { toUserMessage } from '@/lib/errors'
@@ -30,7 +32,7 @@ import type { ApprovalValue, Option, OptionResult, Participant } from '@/types/d
  */
 export function CategoryPage() {
   const { categoryId = '' } = useParams<{ categoryId: string }>()
-  const { preview, participant, categories } = useTripContext()
+  const { slug, preview, participant, categories } = useTripContext()
   const queryClient = useQueryClient()
 
   const category = categories.find((item) => item.id === categoryId)
@@ -58,7 +60,7 @@ export function CategoryPage() {
     queryFn: () => listParticipants(preview.trip_id),
   })
 
-  const vote = useVote(categoryId)
+  const vote = useVote(categoryId, preview.trip_id, category?.vote_mode ?? 'approval')
   const [announcement, setAnnouncement] = useState('')
   const [frozenOrder, setFrozenOrder] = useState<string[] | null>(null)
 
@@ -75,6 +77,8 @@ export function CategoryPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: qk.options(categoryId) })
       await queryClient.invalidateQueries({ queryKey: qk.results(categoryId) })
+      // Le hub compte les propositions par catégorie : une de plus le change.
+      await queryClient.invalidateQueries({ queryKey: qk.progress(preview.trip_id) })
       setFrozenOrder(null)
     },
   })
@@ -126,6 +130,19 @@ export function CategoryPage() {
   const canPropose = !closed && (category.allow_participant_options || participant.is_organizer)
   const votedCount = ordered.filter((option) => votes[option.id] !== undefined).length
 
+  const mode = category.vote_mode
+  const choiceMode = isChoiceMode(mode)
+  const selectedCount = Object.values(votes).filter((value) => value === 1).length
+  const remaining = remainingChoices(mode, category.max_choices, selectedCount)
+  // Le plafond est annoncé **avant** d'être atteint, et les propositions non
+  // retenues deviennent inertes : un refus qu'on pouvait éviter est un bug
+  // d'interface, pas un message d'erreur à afficher.
+  const capReached = remaining === 0
+  const topCount = Math.max(
+    0,
+    ...ordered.map((option) => resultsByOption.get(option.id)?.yes_count ?? 0),
+  )
+
   function onVote(option: Option, value: ApprovalValue | null) {
     // L'ordre se fige au premier vote : une carte ne doit jamais glisser sous
     // le doigt parce que son score vient de changer.
@@ -135,7 +152,12 @@ export function CategoryPage() {
     setAnnouncement(
       value === null
         ? labels.voting.retracted(option.title)
-        : labels.voting.recorded(option.title, approvalLabel(value)),
+        : labels.voting.recorded(
+            option.title,
+            // En mode de choix, la valeur est toujours 1 : « Oui » ne veut
+            // rien dire de plus que « retenu ».
+            choiceMode ? labels.voting.kept : approvalLabel(value),
+          ),
     )
 
     if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
@@ -144,7 +166,7 @@ export function CategoryPage() {
   }
 
   return (
-    <PageShell className="flex flex-col gap-6 pb-16">
+    <PageShell className="flex flex-col gap-6 pb-28">
       <header className="flex flex-col gap-1">
         <p className="text-sm text-text-muted">
           {preview.cover_emoji} {preview.title}
@@ -156,6 +178,18 @@ export function CategoryPage() {
       {closed ? (
         <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
           {labels.voting.closed}
+        </p>
+      ) : null}
+
+      {choiceMode && !closed ? (
+        <p className="text-sm text-text-muted">
+          {mode === 'single'
+            ? labels.voting.singleHint
+            : `${labels.voting.multipleHint(category.max_choices)} ${
+                category.max_choices === null
+                  ? ''
+                  : labels.voting.multipleRemaining(remaining ?? 0)
+              }`.trim()}
         </p>
       ) : null}
 
@@ -182,19 +216,33 @@ export function CategoryPage() {
             ) : null}
           </div>
 
-          <ul className="flex flex-col gap-4">
-            {ordered.map((option) => (
-              <li key={option.id}>
-                <OptionCard
-                  option={option}
-                  result={resultsByOption.get(option.id) ?? null}
-                  value={votes[option.id] ?? null}
-                  proposedBy={nameOf(option.created_by, participants.data ?? [])}
-                  disabled={closed}
-                  onVote={(value) => onVote(option, value)}
-                />
-              </li>
-            ))}
+          {/*
+            En choix unique, c'est la liste entière qui forme le groupe de
+            radios : cocher ici décoche ailleurs, et un lecteur d'écran doit
+            l'apprendre du conteneur, pas du bouton.
+          */}
+          <ul
+            className="flex flex-col gap-4"
+            role={mode === 'single' ? 'radiogroup' : undefined}
+            aria-label={mode === 'single' ? category.label : undefined}
+          >
+            {ordered.map((option) => {
+              const selected = votes[option.id] === 1
+              return (
+                <li key={option.id} role={mode === 'single' ? 'presentation' : undefined}>
+                  <OptionCard
+                    option={option}
+                    result={resultsByOption.get(option.id) ?? null}
+                    value={votes[option.id] ?? null}
+                    mode={mode}
+                    topCount={topCount}
+                    proposedBy={nameOf(option.created_by, participants.data ?? [])}
+                    disabled={closed || (capReached && !selected)}
+                    onVote={(value) => onVote(option, value)}
+                  />
+                </li>
+              )
+            })}
           </ul>
         </>
       )}
@@ -218,6 +266,8 @@ export function CategoryPage() {
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>
+
+      <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
     </PageShell>
   )
 }

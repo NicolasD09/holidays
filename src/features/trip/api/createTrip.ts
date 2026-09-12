@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { CategoryDraft } from '@/features/trip/components/category-catalogue'
 import { ensureSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import type { CreatedTrip } from '@/types/domain'
@@ -25,12 +26,19 @@ export type CreateTripInput = {
   title: string
   emoji: string
   displayName: string
+  /**
+   * Au moins une catégorie : `app_create_trip` lève `invalid_categories` sur
+   * un tableau vide, et le sélecteur verrouille la destination pour que ce
+   * cas ne puisse pas se produire depuis l'écran.
+   */
+  categories: CategoryDraft[]
 }
 
 export async function createTrip({
   title,
   emoji,
   displayName,
+  categories,
 }: CreateTripInput): Promise<CreatedTrip> {
   // La session anonyme n'est créée qu'ici : ouvrir la page d'accueil ne doit
   // fabriquer aucune identité (doc 04 §4.5).
@@ -40,16 +48,10 @@ export async function createTrip({
     p_title: title,
     p_emoji: emoji,
     p_display_name: displayName,
-    // Sprint 2 : une seule catégorie, un seul mode de vote. Le sélecteur de
-    // catégories arrive au sprint 3 (doc 08).
-    p_categories: [
-      {
-        kind: 'destination',
-        label: 'Destination',
-        vote_mode: 'approval',
-        allow_participant_options: true,
-      },
-    ],
+    // L'ordre du tableau devient la `position` des catégories en base, donc
+    // l'ordre des cartes du hub. Il vient du catalogue, pas de l'ordre dans
+    // lequel l'utilisateur a coché.
+    p_categories: categories,
   })
 
   if (error) throw error

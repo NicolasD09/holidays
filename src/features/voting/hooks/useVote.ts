@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { castVote, retractVote, type MyVotes } from '@/features/voting/api/votes'
 import { labels } from '@/lib/labels'
 import { qk } from '@/lib/queryKeys'
-import type { ApprovalValue } from '@/types/domain'
+import type { ApprovalValue, VoteMode } from '@/types/domain'
 
 export type VoteInput = {
   optionId: string
@@ -16,8 +16,18 @@ export type VoteInput = {
  * Applique un vote à l'état local. Pure, donc testable sans réseau ni React :
  * c'est la seule pièce du vote optimiste qui peut se tromper en silence.
  */
-export function patchVote(votes: MyVotes, { optionId, value }: VoteInput): MyVotes {
-  const next = { ...votes }
+export function patchVote(
+  votes: MyVotes,
+  { optionId, value }: VoteInput,
+  /**
+   * En mode `single`, choisir une proposition retire la précédente : le
+   * déclencheur `votes_single_choice` le fait en base, l'état optimiste doit
+   * dire la même chose *avant* la réponse — sinon deux cartes restent
+   * allumées le temps d'un aller-retour.
+   */
+  exclusive = false,
+): MyVotes {
+  const next = exclusive && value !== null ? {} : { ...votes }
   if (value === null) {
     delete next[optionId]
   } else {
@@ -34,11 +44,13 @@ export function patchVote(votes: MyVotes, { optionId, value }: VoteInput): MyVot
  * la promesse « un tap = un vote enregistré » (doc 05 §5.1) — et son envers
  * honnête quand le réseau lâche.
  *
- * `onSettled` n'invalide que les résultats, jamais `myVotes` : ce cache porte
- * l'état optimiste, le réinvalider ferait clignoter le bouton qu'on vient de
- * taper.
+ * `onSettled` n'invalide jamais `myVotes` : ce cache porte l'état optimiste,
+ * le réinvalider ferait clignoter le bouton qu'on vient de taper. Il invalide
+ * en revanche les résultats de la catégorie **et** la progression du sondage
+ * — sans quoi le hub afficherait encore « À voter » pendant les 30 secondes
+ * de `staleTime` après qu'on a voté (doc 04 §4.5).
  */
-export function useVote(categoryId: string) {
+export function useVote(categoryId: string, tripId: string, voteMode: VoteMode) {
   const queryClient = useQueryClient()
   const retry = useRef<(input: VoteInput) => void>(() => {})
 
@@ -50,7 +62,7 @@ export function useVote(categoryId: string) {
       await queryClient.cancelQueries({ queryKey: qk.myVotes(categoryId) })
       const previous = queryClient.getQueryData<MyVotes>(qk.myVotes(categoryId))
       queryClient.setQueryData<MyVotes>(qk.myVotes(categoryId), (current) =>
-        patchVote(current ?? {}, input),
+        patchVote(current ?? {}, input, voteMode === 'single'),
       )
       return { previous }
     },
@@ -64,6 +76,7 @@ export function useVote(categoryId: string) {
 
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: qk.results(categoryId) })
+      void queryClient.invalidateQueries({ queryKey: qk.progress(tripId) })
     },
   })
 
