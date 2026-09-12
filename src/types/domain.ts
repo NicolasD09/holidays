@@ -21,10 +21,7 @@ export type Participant = Tables<'participants'>
 export type Category = Tables<'categories'>
 export type Option = Tables<'options'>
 export type Vote = Tables<'votes'>
-// `Availability = Tables<'availabilities'>` viendra avec la régénération des
-// types, après `npm run db:push` : la table n'existe pas encore dans
-// `database.ts`. Le classement des créneaux n'en a pas besoin — il ne
-// manipule que `AvailabilityStatus`, dont l'enum existe depuis le sprint 1.
+export type Availability = Tables<'availabilities'>
 
 /**
  * Valeur d'un vote en mode approbation.
@@ -37,6 +34,19 @@ export const approvalValues = [1, 0, -1] as const satisfies readonly ApprovalVal
 export function isApprovalValue(value: number): value is ApprovalValue {
   return value === -1 || value === 0 || value === 1
 }
+
+/**
+ * Les trois états d'un jour peint, dans l'ordre des pinceaux à l'écran.
+ *
+ * `satisfies` garantit que cette liste reste alignée sur l'enum Postgres : si
+ * une valeur y était ajoutée, la compilation casserait ici plutôt qu'à
+ * l'exécution, au moment de valider une réponse du serveur.
+ */
+export const availabilityStatuses = [
+  'yes',
+  'maybe',
+  'no',
+] as const satisfies readonly AvailabilityStatus[]
 
 /** Retour de `app_create_trip`. */
 export type CreatedTrip = {

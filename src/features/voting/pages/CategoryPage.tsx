@@ -12,19 +12,25 @@ import {
 } from '@/components/common/StateBlock'
 import { Button } from '@/components/ui/button'
 import { listParticipants } from '@/features/participant/api/listParticipants'
+import { listAvailabilities } from '@/features/voting/api/availabilities'
 import { fetchCategoryResults } from '@/features/voting/api/categoryResults'
 import { addOption, listOptions } from '@/features/voting/api/options'
 import { fetchMyVotes } from '@/features/voting/api/votes'
 import { AddOptionInline } from '@/features/voting/components/AddOptionInline'
 import { approvalLabel } from '@/features/voting/components/approval-choices'
+import { AvailabilityGrid } from '@/features/voting/components/AvailabilityGrid'
+import { AvailabilityList } from '@/features/voting/components/AvailabilityList'
 import { CategoryNav } from '@/features/voting/components/CategoryNav'
 import { isChoiceMode, remainingChoices } from '@/features/voting/components/choice-modes'
 import { OptionCard } from '@/features/voting/components/OptionCard'
+import { WindowRanking } from '@/features/voting/components/WindowRanking'
+import { useAvailability } from '@/features/voting/hooks/useAvailability'
 import { useVote } from '@/features/voting/hooks/useVote'
 import { toUserMessage } from '@/lib/errors'
 import { labels } from '@/lib/labels'
 import { qk } from '@/lib/queryKeys'
 import { routes } from '@/lib/routes'
+import { respondents } from '@/lib/scoring'
 import type { ApprovalValue, Option, OptionResult, Participant } from '@/types/domain'
 
 /**
@@ -43,22 +49,36 @@ export function CategoryPage() {
 
   const category = categories.find((item) => item.id === categoryId)
 
+  /*
+    Une catégorie dates ne manipule ni proposition ni vote : elle lit et écrit
+    `availabilities`. Les trois requêtes du vote sont donc éteintes ici, et
+    l'écran des dates sort avant leur garde de chargement — une requête
+    désactivée reste `pending` pour toujours.
+  */
+  const isDates = category?.vote_mode === 'availability'
+
   const options = useQuery({
     queryKey: qk.options(categoryId),
     queryFn: () => listOptions(categoryId),
-    enabled: Boolean(category),
+    enabled: Boolean(category) && !isDates,
   })
 
   const myVotes = useQuery({
     queryKey: qk.myVotes(categoryId),
     queryFn: () => fetchMyVotes(categoryId, participant.id),
-    enabled: Boolean(category),
+    enabled: Boolean(category) && !isDates,
   })
 
   const results = useQuery({
     queryKey: qk.results(categoryId),
     queryFn: () => fetchCategoryResults(categoryId),
-    enabled: Boolean(category),
+    enabled: Boolean(category) && !isDates,
+  })
+
+  const availabilities = useQuery({
+    queryKey: qk.availabilities(categoryId),
+    queryFn: () => listAvailabilities(categoryId),
+    enabled: Boolean(category) && isDates,
   })
 
   const participants = useQuery({
@@ -67,8 +87,15 @@ export function CategoryPage() {
   })
 
   const vote = useVote(categoryId, preview.trip_id, category?.vote_mode ?? 'approval')
+  const paint = useAvailability(categoryId, preview.trip_id, participant.id)
   const [announcement, setAnnouncement] = useState('')
   const [frozenOrder, setFrozenOrder] = useState<string[] | null>(null)
+  /*
+    Grille ou liste. Le choix reste local à la visite : c'est une préférence
+    de saisie du moment, pas un réglage du sondage, et surtout pas quelque
+    chose à retenir pour les autres.
+  */
+  const [listView, setListView] = useState(false)
 
   const create = useMutation({
     mutationFn: (values: { title: string; url: string | null }) =>
@@ -110,6 +137,114 @@ export function CategoryPage() {
 
   if (!category) return <NotFoundPage />
 
+  const closedCategory = category.status === 'closed'
+
+  /*
+    É5b — la grille de disponibilités (doc 05 §5.3 5.b).
+
+    Elle sort avant la garde de chargement du vote, qui ne la concerne pas :
+    ici, ce qu'on attend, ce sont les disponibilités, pas les propositions.
+  */
+  if (isDates) {
+    const { window_start: from, window_end: to, nights } = category
+
+    return (
+      <PageShell className="flex flex-col gap-6 pb-28">
+        <header className="flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-text-muted">
+              {preview.cover_emoji} {preview.title}
+            </p>
+            {participant.is_organizer ? (
+              <Button asChild variant="link" className="shrink-0">
+                <Link to={routes.settings(slug)}>{labels.hub.settings}</Link>
+              </Button>
+            ) : null}
+          </div>
+          <h1 className="text-2xl font-semibold">{category.label}</h1>
+          {from !== null && to !== null && nights !== null ? (
+            <p className="text-sm text-text-muted">
+              {labels.availability.window(from, to, nights)}
+            </p>
+          ) : null}
+        </header>
+
+        {closedCategory ? (
+          <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
+            {labels.voting.closed}
+          </p>
+        ) : null}
+
+        {from === null || to === null || nights === null ? (
+          /*
+            Impossible en pratique : la contrainte `dates_window_required`
+            l'interdit en base depuis la migration 7. On le traite quand même
+            plutôt que de planter — une catégorie créée avant cette migration
+            passerait ici.
+          */
+          <StateBlock icon="📅" title={labels.empty.noDateWindow} />
+        ) : availabilities.isPending ? (
+          <LoadingState />
+        ) : availabilities.isError ? (
+          <ErrorState
+            body={toUserMessage(availabilities.error)}
+            action={
+              <Button onClick={() => void availabilities.refetch()}>
+                {labels.error.tryAgain}
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            {listView ? (
+              <AvailabilityList
+                windowStart={from}
+                windowEnd={to}
+                entries={availabilities.data}
+                participantId={participant.id}
+                disabled={closedCategory}
+                onPaint={(drafts) => paint.mutate(drafts)}
+              />
+            ) : (
+              <AvailabilityGrid
+                windowStart={from}
+                windowEnd={to}
+                entries={availabilities.data}
+                participantId={participant.id}
+                disabled={closedCategory}
+                onPaint={(drafts) => paint.mutate(drafts)}
+              />
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-text-muted">
+                {labels.availability.respondents(respondents(availabilities.data).length)}
+              </p>
+              <Button variant="ghost" onClick={() => setListView((current) => !current)}>
+                {listView ? labels.availability.gridView : labels.availability.listView}
+              </Button>
+            </div>
+
+            {/*
+              Le classement vit sous la grille, jamais au-dessus : il se
+              réordonne à chaque coup de pinceau, et rien qui bouge ne doit se
+              trouver là où on pose le doigt.
+            */}
+            <WindowRanking
+              windowStart={from}
+              windowEnd={to}
+              nights={nights}
+              entries={availabilities.data}
+              participants={participants.data ?? []}
+            />
+          </>
+        )}
+
+        <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
+      </PageShell>
+    )
+  }
+
   if (options.isPending || myVotes.isPending) {
     return (
       <PageShell>
@@ -132,44 +267,7 @@ export function CategoryPage() {
   }
 
   const votes = myVotes.data ?? {}
-  const closed = category.status === 'closed'
-
-  /*
-    Catégorie dates : la configuration est enregistrée, la grille arrive au
-    sprint 5. On le dit franchement plutôt que d'afficher trois boutons
-    d'approbation qui n'auraient aucun sens ici — et que le serveur refuserait
-    de toute façon, `app_cast_vote` n'acceptant pas le mode `availability`.
-  */
-  if (category.vote_mode === 'availability') {
-    return (
-      <PageShell className="flex flex-col gap-6 pb-28">
-        <header className="flex flex-col gap-1">
-          <p className="text-sm text-text-muted">
-            {preview.cover_emoji} {preview.title}
-          </p>
-          <h1 className="text-2xl font-semibold">{category.label}</h1>
-        </header>
-
-        <StateBlock
-          icon="📅"
-          title={labels.voting.availabilitySoon}
-          body={labels.voting.availabilitySoonBody}
-        />
-
-        {category.window_start && category.window_end && category.nights ? (
-          <p className="text-center text-sm text-text-muted">
-            {labels.voting.availabilityWindow(
-              category.window_start,
-              category.window_end,
-              category.nights,
-            )}
-          </p>
-        ) : null}
-
-        <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
-      </PageShell>
-    )
-  }
+  const closed = closedCategory
 
   const canPropose = !closed && (category.allow_participant_options || participant.is_organizer)
   const votedCount = ordered.filter((option) => votes[option.id] !== undefined).length
