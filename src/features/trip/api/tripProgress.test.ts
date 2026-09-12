@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computeAvailabilityProgress,
   computeProgress,
   type CategoryProgress,
   type TripProgress,
 } from '@/features/trip/api/tripProgress'
+import type { Category } from '@/types/domain'
 
 /**
  * `computeProgress` remplace une RPC d'agrégat (doc 11 §11.2). C'est donc du
@@ -85,5 +87,88 @@ describe('computeProgress', () => {
 
   it('n’invente pas de catégorie absente', () => {
     expect(computeProgress([], [], 'me')).toEqual({})
+  })
+})
+
+/**
+ * La progression d'une catégorie dates (doc 14 §14.2). Elle ne se mesure ni en
+ * propositions ni en votes : on y peint un calendrier.
+ */
+function datesCategory(id: string, overrides: Partial<Category> = {}): Category {
+  return {
+    id,
+    trip_id: 'trip',
+    kind: 'dates',
+    label: 'Dates',
+    description: null,
+    vote_mode: 'availability',
+    status: 'open',
+    position: 0,
+    allow_participant_options: false,
+    max_choices: null,
+    window_start: '2027-07-01',
+    window_end: '2027-07-20',
+    nights: 2,
+    currency: 'EUR',
+    created_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Marie et Thomas sont libres du 10 au 12 ; personne d'autre n'a rien peint. */
+const painted = [
+  { category_id: 'd1', participant_id: 'p1', day: '2027-07-10', status: 'yes' as const },
+  { category_id: 'd1', participant_id: 'p1', day: '2027-07-11', status: 'yes' as const },
+  { category_id: 'd1', participant_id: 'p1', day: '2027-07-12', status: 'yes' as const },
+  { category_id: 'd1', participant_id: 'p2', day: '2027-07-10', status: 'yes' as const },
+  { category_id: 'd1', participant_id: 'p2', day: '2027-07-11', status: 'yes' as const },
+  { category_id: 'd1', participant_id: 'p2', day: '2027-07-12', status: 'yes' as const },
+]
+
+describe('computeAvailabilityProgress', () => {
+  const dates = datesCategory('d1')
+
+  it('inscrit la catégorie même quand personne n’a rien peint', () => {
+    const progress = computeAvailabilityProgress([dates], [], 'me')
+
+    expect(at(progress, 'd1')).toEqual({
+      optionCount: 0,
+      votedByMe: false,
+      voterIds: [],
+      leader: null,
+    })
+  })
+
+  it('repère mes propres jours', () => {
+    const mine = [{ ...painted[0]!, participant_id: 'me' }]
+
+    expect(at(computeAvailabilityProgress([dates], mine, 'me'), 'd1').votedByMe).toBe(true)
+    expect(at(computeAvailabilityProgress([dates], painted, 'me'), 'd1').votedByMe).toBe(false)
+  })
+
+  it('ne compte chaque personne qu’une fois, quel que soit son nombre de jours', () => {
+    expect(at(computeAvailabilityProgress([dates], painted, 'me'), 'd1').voterIds).toEqual([
+      'p1',
+      'p2',
+    ])
+  })
+
+  it('annonce le créneau en tête, dans les mots de l’écran', () => {
+    expect(at(computeAvailabilityProgress([dates], painted, 'me'), 'd1').leader).toEqual({
+      title: 'sam. 10 → lun. 12 juillet',
+      score: 4,
+    })
+  })
+
+  it('ne désigne aucun meneur sans fenêtre de recherche', () => {
+    const sansFenetre = datesCategory('d1', { window_start: null, nights: null })
+
+    expect(at(computeAvailabilityProgress([sansFenetre], painted, 'me'), 'd1').leader).toBeNull()
+  })
+
+  it('ignore les catégories qui ne sont pas en mode dates', () => {
+    const autre = datesCategory('c1', { vote_mode: 'approval', kind: 'destination' })
+
+    expect(computeAvailabilityProgress([autre], painted, 'me')).toEqual({})
   })
 })

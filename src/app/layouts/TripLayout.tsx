@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { Outlet, useParams } from 'react-router'
 import type { TripContext } from '@/app/layouts/tripContext'
 import { NotFoundPage } from '@/app/pages/NotFoundPage'
@@ -91,5 +91,21 @@ export function TripLayout() {
     categories: categories.data ?? [],
   }
 
-  return <Outlet context={context} />
+  /*
+    Seconde frontière d'attente (tâche 7.3). Celle de `RootLayout` suffirait à
+    ne rien casser, mais elle ferait disparaître tout le sondage — entête,
+    participants, barre de navigation — pendant qu'un écran se télécharge.
+    Ici, seul le contenu de l'onglet clignote.
+  */
+  return (
+    <Suspense
+      fallback={
+        <PageShell>
+          <LoadingState />
+        </PageShell>
+      }
+    >
+      <Outlet context={context} />
+    </Suspense>
+  )
 }

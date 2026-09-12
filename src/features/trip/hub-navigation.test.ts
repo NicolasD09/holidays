@@ -161,3 +161,51 @@ describe('missingParticipants', () => {
     expect(missingParticipants(categories, progress, people, 'me')).toEqual([])
   })
 })
+
+/**
+ * Le correctif du doc 14 §14.2. Une catégorie dates n'a aucune proposition :
+ * mesurée en propositions, elle était invisible du hub — jamais « à voter »,
+ * jamais comptée, ses absents jamais nommés. Le hub annonçait « Tu es à jour »
+ * à quelqu'un qui n'avait pas ouvert le calendrier.
+ */
+describe('catégories dates', () => {
+  const dates = category('d', { vote_mode: 'availability' })
+  const vide = entry({ optionCount: 0 })
+
+  it('reste à voter sans proposition — on y peint, on n’y propose pas', () => {
+    expect(isActionable(dates, { d: vide })).toBe(true)
+  })
+
+  it('sort de la liste dès qu’un seul jour est peint', () => {
+    expect(isActionable(dates, { d: entry({ optionCount: 0, votedByMe: true }) })).toBe(false)
+  })
+
+  it('redevient inerte une fois clôturée', () => {
+    const closed = category('d', { vote_mode: 'availability', status: 'closed' })
+    expect(isActionable(closed, { d: vide })).toBe(false)
+  })
+
+  it('est atteinte par « Continuer à voter »', () => {
+    expect(nextActionable([dates], { d: vide })?.id).toBe('d')
+  })
+
+  it('compte dans la progression', () => {
+    expect(countDone([dates], { d: vide })).toEqual({ done: 0, total: 1 })
+    expect(countDone([dates], { d: entry({ optionCount: 0, votedByMe: true }) })).toEqual({
+      done: 1,
+      total: 1,
+    })
+  })
+
+  it('nomme ceux qui n’ont pas encore peint', () => {
+    const people = [participant('me', 'Marie'), participant('p2', 'Thomas')]
+
+    expect(missingParticipants([dates], { d: vide }, people, 'me')).toEqual(['Thomas'])
+  })
+
+  it('n’ouvre pas la porte aux autres modes sans proposition', () => {
+    // La règle est propre au mode `availability` : ailleurs, pas de
+    // proposition veut toujours dire rien à faire.
+    expect(isActionable(category('a'), { a: vide })).toBe(false)
+  })
+})
