@@ -168,6 +168,118 @@ update categories set vote_mode = 'multiple', max_choices = 1 where id = current
 select chk_refuse('mode multiple · plafond de choix',
   format('select app_cast_vote(%L::uuid, 1::smallint)', current_setting('t.opt1')));
 
+-- ═══════════════════════════════════ 7. disponibilités (sprint 4)
+
+set role authenticated;
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+
+-- La configuration de la fenêtre est validée à la création, avec un code
+-- lisible plutôt qu'une violation de contrainte.
+select chk_refuse('dates · fenêtre absente refusée',
+  $q$select app_create_trip('D', '📅', 'Marie',
+      '[{"kind":"dates","label":"Dates","vote_mode":"availability"}]'::jsonb)$q$);
+
+select chk_refuse('dates · fenêtre plus courte que le séjour',
+  $q$select app_create_trip('D', '📅', 'Marie',
+      '[{"kind":"dates","label":"Dates","vote_mode":"availability",
+         "window_start":"2027-07-01","window_end":"2027-07-05","nights":7}]'::jsonb)$q$);
+
+select chk_refuse('budget · mode amount toujours refusé',
+  $q$select app_create_trip('B', '💶', 'Marie',
+      '[{"kind":"budget","label":"Budget","vote_mode":"amount"}]'::jsonb)$q$);
+
+select app_create_trip('Vacances dates', '📅', 'Marie',
+  '[{"kind":"dates","label":"Dates","vote_mode":"availability",
+     "window_start":"2027-07-01","window_end":"2027-07-31","nights":7}]'::jsonb) as d \gset
+select set_config('t.dtrip', ((:'d')::json->>'trip_id'), false),
+       set_config('t.dpid',  ((:'d')::json->>'participant_id'), false),
+       set_config('t.dslug', ((:'d')::json->>'slug'), false) \gset
+select set_config('t.dcat', (select id::text from categories
+        where trip_id = current_setting('t.dtrip')::uuid), false) \gset
+
+select chk_egal('dates · fenêtre et nuits enregistrées',
+  (select window_start::text || '/' || window_end::text || '/' || nights::text
+   from categories where id = current_setting('t.dcat')::uuid),
+  '2027-07-01/2027-07-31/7');
+
+-- Écriture en masse, puis effacement d'un jour par un statut nul.
+select app_set_availability(current_setting('t.dcat')::uuid,
+  '[{"day":"2027-07-10","status":"yes"},
+    {"day":"2027-07-11","status":"maybe"},
+    {"day":"2027-07-12","status":"no"}]'::jsonb) \gset
+
+select chk_egal('dispos · trois jours peints',
+  (select count(*) from availabilities where category_id = current_setting('t.dcat')::uuid), 3::bigint);
+
+select app_set_availability(current_setting('t.dcat')::uuid,
+  '[{"day":"2027-07-12"}]'::jsonb) \gset
+select chk_egal('dispos · un statut nul efface le jour',
+  (select count(*) from availabilities where category_id = current_setting('t.dcat')::uuid), 2::bigint);
+
+select chk_refuse('dispos · jour hors fenêtre',
+  format('select app_set_availability(%L::uuid, ''[{"day":"2027-08-15","status":"yes"}]''::jsonb)',
+         current_setting('t.dcat')));
+
+select chk_refuse('dispos · statut inconnu',
+  format('select app_set_availability(%L::uuid, ''[{"day":"2027-07-14","status":"peut-etre"}]''::jsonb)',
+         current_setting('t.dcat')));
+
+-- ── l'intrus ne voit rien et n'écrit rien
+set request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003';
+
+select chk_egal('intrus · availabilities',
+  (select count(*) from availabilities where trip_id = current_setting('t.dtrip')::uuid), 0::bigint);
+
+select chk_refuse('intrus · app_set_availability',
+  format('select app_set_availability(%L::uuid, ''[{"day":"2027-07-10","status":"yes"}]''::jsonb)',
+         current_setting('t.dcat')));
+
+-- Un `insert` refusé par une clause `with check` **lève** : contrairement à
+-- un `update`, il ne se contente pas de ne toucher aucune ligne.
+select chk_refuse('intrus · insert direct dans availabilities',
+  format('insert into availabilities (trip_id, category_id, participant_id, day, status)
+          values (%L::uuid, %L::uuid, %L::uuid, ''2027-07-20'', ''yes'')',
+         current_setting('t.dtrip'), current_setting('t.dcat'), current_setting('t.dpid')));
+
+-- ── Thomas rejoint : il voit celles de Marie, mais n'écrit que les siennes
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select app_join_trip(current_setting('t.dslug'), 'Thomas') as j \gset
+select set_config('t.tpid', ((:'j')::json->>'participant_id'), false) \gset
+
+select chk_egal('participant · voit les dispos des autres (mode ouvert)',
+  (select count(*) from availabilities where category_id = current_setting('t.dcat')::uuid), 2::bigint);
+
+select chk_refuse('participant · ne peut pas peindre pour autrui',
+  format('insert into availabilities (trip_id, category_id, participant_id, day, status)
+          values (%L::uuid, %L::uuid, %L::uuid, ''2027-07-21'', ''yes'')',
+         current_setting('t.dtrip'), current_setting('t.dcat'), current_setting('t.dpid')));
+
+-- ── mode aveugle : la dette n° 4 du doc 09
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+update trips set blind_mode = true where id = current_setting('t.dtrip')::uuid;
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_egal('aveugle · Thomas n''a rien peint, il ne voit rien',
+  (select count(*) from availabilities
+   where category_id = current_setting('t.dcat')::uuid
+     and participant_id <> current_setting('t.tpid')::uuid), 0::bigint);
+
+select app_set_availability(current_setting('t.dcat')::uuid,
+  '[{"day":"2027-07-10","status":"yes"}]'::jsonb) \gset
+
+select chk_egal('aveugle · peindre suffit à voir les autres (dette n° 4)',
+  (select count(*) from availabilities
+   where category_id = current_setting('t.dcat')::uuid
+     and participant_id <> current_setting('t.tpid')::uuid), 2::bigint);
+
+-- ── catégorie clôturée
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+update categories set status = 'closed' where id = current_setting('t.dcat')::uuid;
+
+select chk_refuse('dispos · catégorie clôturée',
+  format('select app_set_availability(%L::uuid, ''[{"day":"2027-07-15","status":"yes"}]''::jsonb)',
+         current_setting('t.dcat')));
+
 -- ═══════════════════════════════════ verdict
 
 reset role;

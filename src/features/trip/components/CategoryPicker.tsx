@@ -113,6 +113,70 @@ export function CategoryPicker({
 
       <p className="text-sm text-text-muted">{labels.create.categorySoonHint}</p>
 
+      {value.kinds.includes('dates') ? (
+        <fieldset className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border bg-surface-2 p-4">
+          <legend className="font-medium">{labels.create.datesWindowLabel}</legend>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-1 flex-col gap-2">
+              <label htmlFor="dates-from" className="text-sm font-medium">
+                {labels.create.datesFrom}
+              </label>
+              <Input
+                id="dates-from"
+                type="date"
+                value={value.dates.windowStart}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    dates: { ...value.dates, windowStart: event.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-2">
+              <label htmlFor="dates-to" className="text-sm font-medium">
+                {labels.create.datesTo}
+              </label>
+              <Input
+                id="dates-to"
+                type="date"
+                value={value.dates.windowEnd}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    dates: { ...value.dates, windowEnd: event.target.value },
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="dates-nights" className="text-sm font-medium">
+              {labels.create.datesNights}
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="dates-nights"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={60}
+                className="max-w-24"
+                value={value.dates.nights}
+                onChange={(event) =>
+                  onChange({ ...value, dates: { ...value.dates, nights: event.target.value } })
+                }
+              />
+              <span className="text-text-muted">{labels.create.datesNightsSuffix}</span>
+            </div>
+          </div>
+
+          <p className="text-sm text-text-muted">{labels.create.datesHint}</p>
+        </fieldset>
+      ) : null}
+
       {value.custom.enabled ? (
         <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border bg-surface-2 p-4">
           <div className="flex flex-col gap-2">
