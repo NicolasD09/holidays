@@ -30,6 +30,9 @@ export function CategoryCard({
   const voted = progress?.votedByMe ?? false
   const optionCount = progress?.optionCount ?? 0
   const voterCount = progress?.voterIds.length ?? 0
+  // Une catégorie dates n'a pas de proposition : annoncer « Aucune proposition »
+  // y serait exact et totalement trompeur.
+  const isDates = category.vote_mode === 'availability'
 
   const status = closed
     ? { text: labels.hub.statusClosed, className: 'bg-surface text-text-muted' }
@@ -62,7 +65,7 @@ export function CategoryCard({
       </div>
 
       <p className="text-sm text-text-muted">
-        {labels.hub.options(optionCount)}
+        {isDates ? labels.hub.stayLength(category.nights) : labels.hub.options(optionCount)}
         {participantCount > 0 ? (
           <> · {labels.hub.participation(voterCount, participantCount)}</>
         ) : null}
@@ -83,6 +86,8 @@ export function CategoryCard({
 
       {progress?.leader ? (
         <p className="text-sm text-text-muted">{labels.hub.leader(progress.leader.title)}</p>
+      ) : isDates ? (
+        <p className="text-sm text-text-muted">{labels.hub.noAvailabilityYet}</p>
       ) : optionCount === 0 ? (
         <p className="text-sm text-text-muted">{labels.hub.noOptionsYet}</p>
       ) : null}

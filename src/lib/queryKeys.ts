@@ -17,5 +17,12 @@ export const qk = {
   options: (categoryId: string) => ['category', categoryId, 'options'] as const,
   results: (categoryId: string) => ['category', categoryId, 'results'] as const,
   myVotes: (categoryId: string) => ['category', categoryId, 'my-votes'] as const,
+  /**
+   * Les disponibilités d'une catégorie dates : les miennes **et** celles des
+   * autres, dans la même requête. Une seule clé suffit parce que la policy
+   * `availabilities_select` filtre déjà pour nous — en mode aveugle, la même
+   * requête renvoie simplement moins de lignes.
+   */
+  availabilities: (categoryId: string) => ['category', categoryId, 'availabilities'] as const,
   comments: (optionId: string) => ['option', optionId, 'comments'] as const,
 } as const

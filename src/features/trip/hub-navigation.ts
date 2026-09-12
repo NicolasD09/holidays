@@ -18,10 +18,28 @@ import type { Category, Participant } from '@/types/domain'
  * voter » : il n'y a rien à y faire.
  */
 export function isActionable(category: Category, progress: TripProgress): boolean {
+  if (!isRelevant(category, progress)) return false
+  return !progress[category.id]?.votedByMe
+}
+
+/**
+ * Une catégorie où le participant a quelque chose à faire, ou à avoir fait.
+ *
+ * Le critère dépend du mode, et c'est le seul endroit qui le sait :
+ * - **dates** : il y a toujours un calendrier à peindre, même vide. Une
+ *   catégorie dates n'a aucune proposition, donc la mesurer en propositions la
+ *   rendait invisible (doc 14 §14.2) ;
+ * - **partout ailleurs** : sans proposition, il n'y a rien sur quoi se
+ *   prononcer.
+ *
+ * Une catégorie clôturée n'est jamais concernée : il n'y a plus rien à y faire.
+ */
+function isRelevant(category: Category, progress: TripProgress): boolean {
   if (category.status === 'closed') return false
   const entry = progress[category.id]
-  if (!entry || entry.optionCount === 0) return false
-  return !entry.votedByMe
+  if (!entry) return false
+  if (category.vote_mode === 'availability') return true
+  return entry.optionCount > 0
 }
 
 /** La prochaine catégorie où ce participant a quelque chose à faire. */
@@ -45,9 +63,7 @@ export function countDone(
   categories: Category[],
   progress: TripProgress,
 ): { done: number; total: number } {
-  const relevant = categories.filter(
-    (category) => category.status !== 'closed' && (progress[category.id]?.optionCount ?? 0) > 0,
-  )
+  const relevant = categories.filter((category) => isRelevant(category, progress))
   return {
     done: relevant.filter((category) => progress[category.id]?.votedByMe).length,
     total: relevant.length,
@@ -67,9 +83,7 @@ export function missingParticipants(
   participants: Participant[],
   meId: string,
 ): string[] {
-  const relevant = categories.filter(
-    (category) => category.status !== 'closed' && (progress[category.id]?.optionCount ?? 0) > 0,
-  )
+  const relevant = categories.filter((category) => isRelevant(category, progress))
   if (relevant.length === 0) return []
 
   return participants

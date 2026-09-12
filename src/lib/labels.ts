@@ -61,6 +61,7 @@ export const labels = {
 
   empty: {
     noOptions: 'Aucune proposition pour l’instant. Lance-toi !',
+    noDateWindow: 'Cette catégorie n’a pas de période de recherche.',
   },
 
   /** Noms des catégories, partagés entre la création, le hub et les réglages. */
@@ -197,18 +198,85 @@ export const labels = {
         : left === 1
           ? 'Il te reste 1 choix.'
           : `Il te reste ${left} choix.`,
-    /** Catégorie dates : la grille arrive au sprint 5. */
-    availabilitySoon: 'La grille de disponibilités arrive bientôt.',
-    availabilitySoonBody:
-      'La période de recherche est enregistrée. Il ne manque que l’écran pour peindre tes disponibilités — c’est la prochaine étape.',
-    availabilityWindow: (from: string, to: string, nights: number) =>
-      `Recherche du ${from} au ${to}, pour ${nights} nuit${nights > 1 ? 's' : ''}.`,
     blindNotice: 'Vote à l’aveugle : les résultats apparaîtront après ton vote.',
     resort: 'Reclasser',
     closed: 'Cette catégorie est clôturée. Les votes n’y sont plus modifiables.',
     progress: (voted: number, total: number) =>
       `Tu t’es prononcé sur ${voted} proposition${voted > 1 ? 's' : ''} sur ${total}.`,
     allVoted: 'Tu t’es prononcé sur tout 🎉',
+  },
+
+  /** É5b — grille de disponibilités (doc 05 §5.3 5.b). */
+  availability: {
+    window: (from: string, to: string, nights: number) =>
+      `Recherche du ${from} au ${to}, pour ${nights} nuit${nights > 1 ? 's' : ''}.`,
+    brushLabel: 'Ton pinceau',
+    brushes: {
+      yes: 'Dispo',
+      maybe: 'Peut-être',
+      no: 'Pas dispo',
+      erase: 'Gomme',
+    },
+    hint: 'Choisis un pinceau, puis peins tes jours. Glisse le doigt pour en peindre plusieurs d’un coup.',
+    gridLabel: 'Calendrier de tes disponibilités',
+    allAvailable: 'Tout dispo',
+    clearAll: 'Effacer',
+    statuses: {
+      yes: 'disponible',
+      maybe: 'peut-être disponible',
+      no: 'pas disponible',
+    },
+    statusUnset: 'non renseigné',
+    /**
+     * Le libellé complet d'une case, tel qu'un lecteur d'écran l'annonce.
+     * L'initiale de colonne ne suffit pas : la date entière est dans le label.
+     */
+    dayLabel: (day: string, status: string, others: string | null) =>
+      others === null ? `${day}, ${status}` : `${day}, ${status}, ${others}`,
+    density: (available: number, total: number) =>
+      `${available} personne${available > 1 ? 's' : ''} sur ${total} disponible${available > 1 ? 's' : ''}`,
+    /** Annonces de la région aria-live après un coup de pinceau. */
+    announceDay: (day: string, brush: string) => `${day} : ${brush}`,
+    /** Bascule grille ↔ liste (doc 05 §5.5). */
+    listView: 'Voir en liste',
+    gridView: 'Voir la grille',
+    listHint: 'Retape le même choix pour effacer le jour.',
+    dayGroupLabel: (day: string) => `Ta disponibilité le ${day}`,
+    announceStroke: (count: number, brush: string) =>
+      `${count} jour${count > 1 ? 's' : ''} peint${count > 1 ? 's' : ''} : ${brush}`,
+    failed:
+      'Impossible d’enregistrer tes disponibilités. Vérifie ta connexion et réessaie.',
+    /**
+     * Aucune formulation ne suggère de retard : on dit qui a répondu, jamais
+     * qui manquerait à l'appel (ADR-009, doc 05 §5.1-5).
+     */
+    respondents: (count: number) =>
+      count === 0
+        ? 'Personne n’a encore renseigné ses disponibilités.'
+        : count === 1
+          ? '1 personne a renseigné ses disponibilités.'
+          : `${count} personnes ont renseigné leurs disponibilités.`,
+  },
+
+  /** Classement des créneaux, sous la grille (doc 05 §5.3 5.b). */
+  ranking: {
+    title: 'Les meilleurs créneaux',
+    empty: 'Le classement apparaîtra dès que quelqu\u2019un aura renseigné ses disponibilités.',
+    none: 'Aucun créneau de cette durée ne tient dans la période de recherche.',
+    top: 'En tête',
+    counts: (available: number, tentative: number) => {
+      const sure =
+        available === 0 ? 'Personne de certain' : `${available} dispo${available > 1 ? 's' : ''}`
+      return tentative === 0 ? sure : `${sure} \u00b7 ${tentative} peut-être`
+    },
+    /**
+     * Nommer qui bloque un créneau est factuel : sans le nom, l'information
+     * n'est pas exploitable. Aucune notion de retard (ADR-009).
+     */
+    blocked: (names: string[]) =>
+      names.length === 1
+        ? `${names[0]} n\u2019est pas dispo.`
+        : `${names.slice(0, -1).join(', ')} et ${names.at(-1)} ne sont pas dispo.`,
   },
 
   /** Ajout de proposition inline. */
@@ -260,6 +328,10 @@ export const labels = {
     participation: (voted: number, total: number) => `${voted}/${total} ont répondu`,
     leader: (title: string) => `En tête : ${title}`,
     noOptionsYet: 'Personne n’a encore rien proposé ici.',
+    /** Catégorie dates : ni proposition à compter, ni meneur tant que rien n'est peint. */
+    stayLength: (nights: number | null) =>
+      nights === null ? 'Dates du séjour' : `Séjour de ${nights} nuit${nights > 1 ? 's' : ''}`,
+    noAvailabilityYet: 'Personne n’a encore renseigné ses disponibilités.',
     organizerNudge:
       'Aucune proposition pour l’instant. Ouvre une catégorie et lance la première.',
     settings: 'Réglages',

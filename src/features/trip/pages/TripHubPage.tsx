@@ -39,7 +39,7 @@ export function TripHubPage() {
 
   const progress = useQuery({
     queryKey: qk.progress(preview.trip_id),
-    queryFn: () => fetchTripProgress(preview.trip_id, participant.id),
+    queryFn: () => fetchTripProgress(preview.trip_id, participant.id, categories),
   })
 
   const participants = useQuery({

@@ -1,4 +1,7 @@
+import { formatRange } from '@/lib/dates'
+import { rankWindows } from '@/lib/scoring'
 import { supabase } from '@/lib/supabase'
+import type { AvailabilityStatus, Category } from '@/types/domain'
 
 /**
  * De quoi remplir le hub : par catégorie, combien de propositions, qui s'est
@@ -36,6 +39,12 @@ export type TripProgress = Record<string, CategoryProgress>
 
 type OptionRow = { id: string; category_id: string; title: string }
 type VoteRow = { category_id: string; participant_id: string; option_id: string; value: number }
+type AvailabilityRow = {
+  category_id: string
+  participant_id: string
+  day: string
+  status: AvailabilityStatus
+}
 
 /**
  * Pure, donc testable sans réseau : c'est elle qui porte toute la logique du
@@ -98,20 +107,117 @@ export function computeProgress(
   return progress
 }
 
+/**
+ * Ce qu'une catégorie **dates** apporte au hub (doc 14 §14.2).
+ *
+ * Elle n'a ni proposition ni vote : sans ce calcul, `optionCount` valait 0, la
+ * catégorie n'était jamais « à voter », jamais comptée dans la progression, et
+ * ses absents n'étaient jamais nommés. Le hub affichait « Tu es à jour » à
+ * quelqu'un qui n'avait pas ouvert le calendrier.
+ *
+ * `optionCount` reste à 0 — c'est la vérité, il n'y a pas de proposition. C'est
+ * `hub-navigation` qui sait que, pour ce mode, ça ne rend pas la catégorie
+ * inerte.
+ *
+ * Pure, donc testable sans réseau : même règle que `computeProgress`.
+ */
+export function computeAvailabilityProgress(
+  categories: Category[],
+  rows: AvailabilityRow[],
+  participantId: string,
+): TripProgress {
+  const progress: TripProgress = {}
+
+  const byCategory = new Map<string, AvailabilityRow[]>()
+  for (const row of rows) {
+    const list = byCategory.get(row.category_id) ?? []
+    list.push(row)
+    byCategory.set(row.category_id, list)
+  }
+
+  for (const category of categories) {
+    if (category.vote_mode !== 'availability') continue
+
+    const entries = byCategory.get(category.id) ?? []
+    progress[category.id] = {
+      optionCount: 0,
+      votedByMe: entries.some((entry) => entry.participant_id === participantId),
+      voterIds: [...new Set(entries.map((entry) => entry.participant_id))],
+      leader: leadingSlot(category, entries),
+    }
+  }
+
+  return progress
+}
+
+/**
+ * Le créneau en tête, tel que la carte du hub l'annonce.
+ *
+ * Même algorithme que l'écran — `rankWindows`, prouvé au sprint 4. Un score nul
+ * ne « mène » rien, exactement comme trois « non » ne désignent pas un gagnant.
+ */
+function leadingSlot(
+  category: Category,
+  entries: AvailabilityRow[],
+): { title: string; score: number } | null {
+  const { window_start: from, window_end: to, nights } = category
+  if (from === null || to === null || nights === null || entries.length === 0) return null
+
+  const [best] = rankWindows({
+    windowStart: from,
+    windowEnd: to,
+    nights,
+    availabilities: entries.map((entry) => ({
+      participantId: entry.participant_id,
+      day: entry.day,
+      status: entry.status,
+    })),
+  })
+
+  if (!best || best.score <= 0) return null
+  return { title: formatRange(best.start, best.end), score: best.score }
+}
+
 export async function fetchTripProgress(
   tripId: string,
   participantId: string,
+  categories: Category[],
 ): Promise<TripProgress> {
-  const [options, votes] = await Promise.all([
+  const [options, votes, availabilities] = await Promise.all([
     supabase.from('options').select('id, category_id, title').eq('trip_id', tripId),
     supabase
       .from('votes')
       .select('category_id, participant_id, option_id, value')
       .eq('trip_id', tripId),
+    // Troisième lecture seulement si le sondage a une catégorie dates : la
+    // majorité n'en a pas, et un aller-retour inutile se paie à chaque
+    // ouverture du hub.
+    fetchAvailabilityRows(
+      tripId,
+      categories.some((category) => category.vote_mode === 'availability'),
+    ),
   ])
 
   if (options.error) throw options.error
   if (votes.error) throw votes.error
 
-  return computeProgress(options.data, votes.data, participantId)
+  return {
+    ...computeProgress(options.data, votes.data, participantId),
+    ...computeAvailabilityProgress(categories, availabilities, participantId),
+  }
+}
+
+async function fetchAvailabilityRows(
+  tripId: string,
+  needed: boolean,
+): Promise<AvailabilityRow[]> {
+  if (!needed) return []
+
+  const { data, error } = await supabase
+    .from('availabilities')
+    .select('category_id, participant_id, day, status')
+    .eq('trip_id', tripId)
+
+  if (error) throw error
+  return data
 }
