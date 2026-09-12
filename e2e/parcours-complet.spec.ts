@@ -64,6 +64,16 @@ test.describe('parcours complet', () => {
     await voter(pageThomas, 'Palerme', labels.voting.maybe)
     await voter(pageThomas, 'Split', labels.voting.no)
 
+    // Le vote est optimiste : `aria-checked` bascule avant que le serveur ait
+    // répondu (doc 04 §4.5). Les résultats agrégés, eux, viennent de
+    // `app_category_results` — les attendre chez Thomas, c'est attendre que
+    // son « non » soit réellement commité. Sans ce point d'ancrage, Marie
+    // pouvait recharger avant, lire Split à zéro vote, et ne plus jamais
+    // refaire de requête : c'est la course qui rendait ce test flaky.
+    await expect(
+      carte(pageThomas, 'Split').getByText(labels.voting.blocking(1)),
+    ).toBeVisible()
+
     // ── Le vote survit au rechargement ───────────────────────────────────
     await pageThomas.reload()
     await expect(radio(pageThomas, 'Lisbonne', labels.voting.yes)).toHaveAttribute(

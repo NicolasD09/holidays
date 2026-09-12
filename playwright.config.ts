@@ -1,4 +1,18 @@
 import { defineConfig, devices } from '@playwright/test'
+import { loadEnv } from 'vite'
+
+/**
+ * `.env.local` est lu par Vite, pas par le process Node de Playwright : sans
+ * ce pont, `npm run test:e2e` en local s'annonçait « skipped » — dix tests
+ * ignorés ressemblant de très près à dix tests verts.
+ *
+ * En CI les deux variables viennent des secrets GitHub et sont déjà dans
+ * `process.env` : le `??=` les laisse gagner, et `.env.local` n'y existe pas
+ * de toute façon. Aucune dépendance ajoutée, `loadEnv` vient de Vite.
+ */
+const env = loadEnv('development', process.cwd(), 'VITE_')
+process.env.VITE_SUPABASE_URL ??= env.VITE_SUPABASE_URL
+process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??= env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 /**
  * E2E — le parcours complet à deux participants (doc 08, tâche 1.12).
