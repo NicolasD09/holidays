@@ -14,6 +14,58 @@ export type Database = {
   }
   public: {
     Tables: {
+      availabilities: {
+        Row: {
+          category_id: string
+          day: string
+          id: string
+          participant_id: string
+          status: Database["public"]["Enums"]["availability_status"]
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          day: string
+          id?: string
+          participant_id: string
+          status: Database["public"]["Enums"]["availability_status"]
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          day?: string
+          id?: string
+          participant_id?: string
+          status?: Database["public"]["Enums"]["availability_status"]
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availabilities_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availabilities_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availabilities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           allow_participant_options: boolean
@@ -346,6 +398,10 @@ export type Database = {
         Returns: Json
       }
       app_retract_vote: { Args: { p_option_id: string }; Returns: undefined }
+      app_set_availability: {
+        Args: { p_category: string; p_days: Json }
+        Returns: Json
+      }
       app_slug_candidate: { Args: never; Returns: string }
       app_trip_preview: { Args: { p_slug: string }; Returns: Json }
     }
