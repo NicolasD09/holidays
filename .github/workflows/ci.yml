@@ -14,9 +14,9 @@ jobs:
     name: Lint · Types · Tests · Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -61,7 +61,7 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # doc 04 §4.7 — les policies sont vérifiées sur une base nue, sans Docker
       # ni secret : cette barrière est donc toujours active, y compris sur une
@@ -76,9 +76,9 @@ jobs:
     name: Tests de sécurité (holidays-dev)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -86,10 +86,22 @@ jobs:
       - name: Installer les dépendances
         run: npm ci
 
+      # Une PR venue d'un fork n'a pas accès aux secrets : là, s'annoncer
+      # ignoré est la bonne réponse. Partout ailleurs, un secret manquant veut
+      # dire que la barrière du doc 04 §4.7 ne s'exécute pas — et un job vert
+      # qui n'a rien vérifié est pire que pas de job du tout.
+      - name: Les secrets doivent être là
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DEV_URL }}" ] \
+          || [ -z "${{ secrets.SUPABASE_DEV_PUBLISHABLE_KEY }}" ]; then
+            echo "::error::SUPABASE_DEV_URL / SUPABASE_DEV_PUBLISHABLE_KEY absents."
+            echo "::error::Les tests de sécurité ne peuvent pas tourner : Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
       # doc 04 §4.7 — non négociables avant toute mise en ligne. Les tests
-      # parlent à `holidays-dev` avec les droits d'un navigateur. Sans les deux
-      # secrets, ils s'annoncent ignorés au lieu d'échouer : c'est ce qui permet
-      # à une PR venue d'un fork de rester lisible.
+      # parlent à `holidays-dev` avec les droits d'un navigateur.
       - name: RLS
         run: npm run test:security
         env:
@@ -100,9 +112,9 @@ jobs:
     name: Parcours complet (Playwright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -115,15 +127,25 @@ jobs:
       - name: Installer les navigateurs
         run: npx playwright install --with-deps webkit chromium
 
-      # Comme la suite de sécurité, le parcours parle au vrai `holidays-dev` :
-      # sans les secrets, il s'annonce ignoré plutôt que rouge.
+      # Même règle que le job `securite` : tolérant au fork, exigeant ailleurs.
+      - name: Les secrets doivent être là
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
+        run: |
+          if [ -z "${{ secrets.SUPABASE_DEV_URL }}" ] \
+          || [ -z "${{ secrets.SUPABASE_DEV_PUBLISHABLE_KEY }}" ]; then
+            echo "::error::SUPABASE_DEV_URL / SUPABASE_DEV_PUBLISHABLE_KEY absents."
+            echo "::error::Le parcours complet ne peut pas tourner : Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      # Comme la suite de sécurité, le parcours parle au vrai `holidays-dev`.
       - name: Parcours complet
         run: npx playwright test
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_DEV_PUBLISHABLE_KEY }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
