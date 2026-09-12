@@ -98,11 +98,21 @@ export const labels = {
     categoryHint:
       'La destination est toujours là. Coche ce que vous voulez décider en plus.',
     categorySoon: 'Bientôt',
-    categorySoonHint: 'Les dates et le budget arrivent dans un prochain sprint.',
+    categorySoonHint: 'Le budget arrive dans un prochain sprint.',
+    datesWindowLabel: 'Entre quelles dates on cherche ?',
+    datesFrom: 'À partir du',
+    datesTo: 'Jusqu’au',
+    datesNights: 'Combien de nuits ?',
+    datesNightsSuffix: 'nuits',
+    datesHint:
+      'Chacun peindra ses disponibilités sur cette période, et l’app classera les meilleurs créneaux.',
     categoryLocked: 'Toujours incluse',
     customLabelField: 'Nom de la catégorie',
     customLabelPlaceholder: 'Restaurant du dernier soir',
     customModeLabel: 'Comment on vote',
+    invalid_date_window: 'Choisis une période valide (jusqu’à 400 jours).',
+    invalid_nights: 'Indique une durée entre 1 et 60 nuits.',
+    window_too_short: 'La période est plus courte que le séjour demandé.',
     errorCustomLabelRequired: 'Donne un nom à ta catégorie, ou décoche-la.',
     errorCustomLabelTooLong: '60 caractères maximum.',
     nameLabel: 'Ton prénom',
@@ -187,6 +197,12 @@ export const labels = {
         : left === 1
           ? 'Il te reste 1 choix.'
           : `Il te reste ${left} choix.`,
+    /** Catégorie dates : la grille arrive au sprint 5. */
+    availabilitySoon: 'La grille de disponibilités arrive bientôt.',
+    availabilitySoonBody:
+      'La période de recherche est enregistrée. Il ne manque que l’écran pour peindre tes disponibilités — c’est la prochaine étape.',
+    availabilityWindow: (from: string, to: string, nights: number) =>
+      `Recherche du ${from} au ${to}, pour ${nights} nuit${nights > 1 ? 's' : ''}.`,
     blindNotice: 'Vote à l’aveugle : les résultats apparaîtront après ton vote.',
     resort: 'Reclasser',
     closed: 'Cette catégorie est clôturée. Les votes n’y sont plus modifiables.',

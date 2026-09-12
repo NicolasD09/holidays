@@ -4,7 +4,12 @@ import { Link, useParams } from 'react-router'
 import { useTripContext } from '@/app/layouts/tripContext'
 import { NotFoundPage } from '@/app/pages/NotFoundPage'
 import { PageShell } from '@/components/common/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '@/components/common/StateBlock'
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  StateBlock,
+} from '@/components/common/StateBlock'
 import { Button } from '@/components/ui/button'
 import { listParticipants } from '@/features/participant/api/listParticipants'
 import { fetchCategoryResults } from '@/features/voting/api/categoryResults'
@@ -128,6 +133,44 @@ export function CategoryPage() {
 
   const votes = myVotes.data ?? {}
   const closed = category.status === 'closed'
+
+  /*
+    Catégorie dates : la configuration est enregistrée, la grille arrive au
+    sprint 5. On le dit franchement plutôt que d'afficher trois boutons
+    d'approbation qui n'auraient aucun sens ici — et que le serveur refuserait
+    de toute façon, `app_cast_vote` n'acceptant pas le mode `availability`.
+  */
+  if (category.vote_mode === 'availability') {
+    return (
+      <PageShell className="flex flex-col gap-6 pb-28">
+        <header className="flex flex-col gap-1">
+          <p className="text-sm text-text-muted">
+            {preview.cover_emoji} {preview.title}
+          </p>
+          <h1 className="text-2xl font-semibold">{category.label}</h1>
+        </header>
+
+        <StateBlock
+          icon="📅"
+          title={labels.voting.availabilitySoon}
+          body={labels.voting.availabilitySoonBody}
+        />
+
+        {category.window_start && category.window_end && category.nights ? (
+          <p className="text-center text-sm text-text-muted">
+            {labels.voting.availabilityWindow(
+              category.window_start,
+              category.window_end,
+              category.nights,
+            )}
+          </p>
+        ) : null}
+
+        <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
+      </PageShell>
+    )
+  }
+
   const canPropose = !closed && (category.allow_participant_options || participant.is_organizer)
   const votedCount = ordered.filter((option) => votes[option.id] !== undefined).length
 

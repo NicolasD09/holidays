@@ -14,12 +14,17 @@ export type TripStatus = Enums<'trip_status'>
 export type CategoryKind = Enums<'category_kind'>
 export type CategoryStatus = Enums<'category_status'>
 export type VoteMode = Enums<'vote_mode'>
+export type AvailabilityStatus = Enums<'availability_status'>
 
 export type Trip = Tables<'trips'>
 export type Participant = Tables<'participants'>
 export type Category = Tables<'categories'>
 export type Option = Tables<'options'>
 export type Vote = Tables<'votes'>
+// `Availability = Tables<'availabilities'>` viendra avec la régénération des
+// types, après `npm run db:push` : la table n'existe pas encore dans
+// `database.ts`. Le classement des créneaux n'en a pas besoin — il ne
+// manipule que `AvailabilityStatus`, dont l'enum existe depuis le sprint 1.
 
 /**
  * Valeur d'un vote en mode approbation.

@@ -33,6 +33,15 @@ const messages: Record<string, string> = {
 
   blind_mode_active: 'Vote d’abord : les résultats s’affichent ensuite.',
 
+  invalid_date_window:
+    'Choisis une période de recherche valide, plus longue que la durée du séjour.',
+  invalid_nights: 'Indique une durée entre 1 et 60 nuits.',
+  window_too_short: 'La période est trop courte pour un séjour de cette durée.',
+  invalid_days: 'Ces dates ne sont pas valides.',
+  too_many_days: 'Trop de jours d’un coup. Réessaie sur une période plus courte.',
+  day_out_of_window: 'Ce jour est en dehors de la période de recherche.',
+  invalid_availability_status: 'Cette disponibilité n’est pas valide.',
+
   trip_delete_refused:
     'Le sondage n’a pas été supprimé : seul son organisateur peut le faire, depuis l’appareil qui l’a créé.',
 }

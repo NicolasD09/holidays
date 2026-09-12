@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createTrip } from '@/features/trip/api/createTrip'
 import {
-  defaultCategorySelection,
+  createDefaultSelection,
   toCategoryDrafts,
+  validateDatesConfig,
   type CategorySelection,
 } from '@/features/trip/components/category-catalogue'
 import { CategoryPicker } from '@/features/trip/components/CategoryPicker'
@@ -51,9 +52,7 @@ export function CreateTripPage() {
   const navigate = useNavigate()
   const [emoji, setEmoji] = useState('🏖️')
   const [createdSlug, setCreatedSlug] = useState<string | null>(null)
-  const [categories, setCategories] = useState<CategorySelection>(
-    defaultCategorySelection,
-  )
+  const [categories, setCategories] = useState<CategorySelection>(createDefaultSelection)
   const [categoryError, setCategoryError] = useState<string | null>(null)
 
   const {
@@ -83,6 +82,14 @@ export function CreateTripPage() {
    * une catégorie libre cochée doit porter un nom — est donc vérifiée ici.
    */
   function validateCategories(): boolean {
+    if (categories.kinds.includes('dates')) {
+      const problem = validateDatesConfig(categories.dates)
+      if (problem) {
+        setCategoryError(labels.create[problem])
+        return false
+      }
+    }
+
     if (!categories.custom.enabled) return true
     const label = categories.custom.label.trim()
     if (!label) {
