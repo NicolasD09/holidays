@@ -1,8 +1,10 @@
 import { ApprovalButtons } from '@/features/voting/components/ApprovalButtons'
+import { ChoiceButton } from '@/features/voting/components/ChoiceButton'
+import { isChoiceMode } from '@/features/voting/components/choice-modes'
 import { ResultBar } from '@/features/voting/components/ResultBar'
 import { labels } from '@/lib/labels'
 import { cn } from '@/lib/utils'
-import type { ApprovalValue, Option, OptionResult } from '@/types/domain'
+import type { ApprovalValue, Option, OptionResult, VoteMode } from '@/types/domain'
 
 /**
  * Une proposition et son vote (doc 05 §5.3).
@@ -16,6 +18,8 @@ export function OptionCard({
   option,
   result,
   value,
+  mode,
+  topCount,
   proposedBy,
   disabled,
   onVote,
@@ -23,7 +27,11 @@ export function OptionCard({
   option: Option
   result: OptionResult | null
   value: ApprovalValue | null
+  mode: VoteMode
+  /** Voix de la proposition en tête — échelle des barres en mode de choix. */
+  topCount?: number
   proposedBy: string | null
+  /** Catégorie clôturée, ou plafond de choix atteint sur une autre proposition. */
   disabled?: boolean
   onVote: (value: ApprovalValue | null) => void
 }) {
@@ -56,14 +64,24 @@ export function OptionCard({
         </p>
       </header>
 
-      <ApprovalButtons
-        optionTitle={option.title}
-        value={value}
-        disabled={disabled}
-        onVote={onVote}
-      />
+      {isChoiceMode(mode) ? (
+        <ChoiceButton
+          mode={mode}
+          optionTitle={option.title}
+          selected={value === 1}
+          disabled={disabled}
+          onToggle={(next) => onVote(next ? 1 : null)}
+        />
+      ) : (
+        <ApprovalButtons
+          optionTitle={option.title}
+          value={value}
+          disabled={disabled}
+          onVote={onVote}
+        />
+      )}
 
-      {result ? <ResultBar result={result} /> : null}
+      {result ? <ResultBar result={result} mode={mode} topCount={topCount} /> : null}
 
       {blocking > 0 ? (
         <p className="text-sm font-medium text-no">{labels.voting.blocking(blocking)}</p>

@@ -10,6 +10,8 @@ export const qk = {
   tripPreview: (slug: string) => ['trip', slug, 'preview'] as const,
   categories: (tripId: string) => ['trip', tripId, 'categories'] as const,
   participants: (tripId: string) => ['trip', tripId, 'participants'] as const,
+  /** Agrégat du hub : propositions, votants et meneur par catégorie. */
+  progress: (tripId: string) => ['trip', tripId, 'progress'] as const,
   /** Ma fiche de participant sur ce sondage — l'identité de cet appareil. */
   me: (tripId: string) => ['trip', tripId, 'participants', 'me'] as const,
   options: (categoryId: string) => ['category', categoryId, 'options'] as const,

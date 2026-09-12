@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet, useParams } from 'react-router'
 import type { TripContext } from '@/app/layouts/tripContext'
 import { NotFoundPage } from '@/app/pages/NotFoundPage'
@@ -9,6 +10,7 @@ import { TripPreviewBackdrop } from '@/features/participant/components/TripPrevi
 import { useTripAccess } from '@/features/participant/hooks/useTripAccess'
 import { extractCode, toUserMessage } from '@/lib/errors'
 import { labels } from '@/lib/labels'
+import { rememberTrip } from '@/lib/visitedTrips'
 
 /**
  * Enveloppe des écrans d'un sondage, et garde de participation (doc 04 §4.4).
@@ -21,6 +23,17 @@ import { labels } from '@/lib/labels'
 export function TripLayout() {
   const { slug = '' } = useParams<{ slug: string }>()
   const { preview, participant, categories, isParticipant } = useTripAccess(slug)
+
+  // `/mine` se remplit ici plutôt qu'à l'adhésion : tout passage réussi sur
+  // un sondage le mémorise, y compris le retour du lendemain sur un sondage
+  // rejoint avant ce sprint (tâche 2.6). Purement local, et sans effet si le
+  // stockage est indisponible.
+  const title = preview.data?.title
+  const emoji = preview.data?.cover_emoji ?? null
+  useEffect(() => {
+    if (!isParticipant || !title) return
+    rememberTrip({ slug, title, emoji })
+  }, [slug, title, emoji, isParticipant])
 
   if (preview.isPending) {
     return (

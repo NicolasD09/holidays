@@ -63,6 +63,29 @@ export const labels = {
     noOptions: 'Aucune proposition pour l’instant. Lance-toi !',
   },
 
+  /** Noms des catégories, partagés entre la création, le hub et les réglages. */
+  categories: {
+    destination: 'Destination',
+    dates: 'Dates',
+    budget: 'Budget',
+    lodging: 'Logement',
+    activity: 'Activités',
+    custom: 'Autre…',
+  },
+
+  /** Modes de vote — libellé court, et ce que ça change pour le votant. */
+  voteModes: {
+    approval: {
+      label: 'Approbation',
+      hint: 'Chacun dit oui, peut-être ou non sur chaque proposition.',
+    },
+    single: { label: 'Choix unique', hint: 'Chacun ne retient qu’une seule proposition.' },
+    multiple: {
+      label: 'Choix multiple',
+      hint: 'Chacun en retient plusieurs, avec un plafond si tu veux.',
+    },
+  },
+
   /** É2 — création d'un sondage. */
   create: {
     title: 'Nouveau sondage',
@@ -72,9 +95,16 @@ export const labels = {
     titleHint: 'C’est ce que tes potes verront en ouvrant le lien.',
     emojiLabel: 'Emoji de couverture',
     categoryLabel: 'Ce qu’on décide',
-    categoryFixed: 'Destination',
-    categoryFixedHint:
-      'Pour l’instant on décide de la destination. Les dates, le budget et le reste arrivent bientôt.',
+    categoryHint:
+      'La destination est toujours là. Coche ce que vous voulez décider en plus.',
+    categorySoon: 'Bientôt',
+    categorySoonHint: 'Les dates et le budget arrivent dans un prochain sprint.',
+    categoryLocked: 'Toujours incluse',
+    customLabelField: 'Nom de la catégorie',
+    customLabelPlaceholder: 'Restaurant du dernier soir',
+    customModeLabel: 'Comment on vote',
+    errorCustomLabelRequired: 'Donne un nom à ta catégorie, ou décoche-la.',
+    errorCustomLabelTooLong: '60 caractères maximum.',
     nameLabel: 'Ton prénom',
     namePlaceholder: 'Marie',
     nameHint: 'Tu seras l’organisateur du sondage.',
@@ -137,6 +167,26 @@ export const labels = {
       count === 1
         ? 'Ne convient pas à 1 personne'
         : `Ne convient pas à ${count} personnes`,
+    /** Modes `single` et `multiple` : on retient une proposition, on ne la note pas. */
+    choose: 'Je choisis',
+    chosen: 'Mon choix',
+    keep: 'Je retiens',
+    kept: 'Retenu',
+    chooseLabel: (option: string) => `Choisir ${option}`,
+    keepLabel: (option: string) => `Retenir ${option}`,
+    votes: (count: number) =>
+      count === 0 ? 'aucune voix' : count === 1 ? '1 voix' : `${count} voix`,
+    singleHint: 'Une seule proposition : en choisir une autre remplace ton choix.',
+    multipleHint: (max: number | null) =>
+      max === null
+        ? 'Tu peux en retenir autant que tu veux.'
+        : `Tu peux en retenir ${max} au maximum.`,
+    multipleRemaining: (left: number) =>
+      left === 0
+        ? 'Tu as utilisé tous tes choix. Retires-en un pour en retenir un autre.'
+        : left === 1
+          ? 'Il te reste 1 choix.'
+          : `Il te reste ${left} choix.`,
     blindNotice: 'Vote à l’aveugle : les résultats apparaîtront après ton vote.',
     resort: 'Reclasser',
     closed: 'Cette catégorie est clôturée. Les votes n’y sont plus modifiables.',
@@ -147,7 +197,9 @@ export const labels = {
 
   /** Ajout de proposition inline. */
   addOption: {
-    open: 'Proposer une destination',
+    // Générique depuis le sprint 3 : ce champ sert dans toutes les catégories,
+    // pas seulement la destination.
+    open: 'Ajouter une proposition',
     titleLabel: 'Ta proposition',
     titlePlaceholder: 'Lisbonne',
     urlLabel: 'Un lien (facultatif)',
@@ -162,6 +214,85 @@ export const labels = {
   trip: {
     share: 'Partager',
     noCategories: 'Ce sondage n’a encore rien à décider.',
+  },
+
+  /** É4 — hub du sondage. */
+  hub: {
+    /**
+     * Bandeau de progression. Aucune formulation ne doit suggérer du retard :
+     * on montre où en est le groupe, jamais qu'il serait en retard
+     * (doc 05 §5.1-5).
+     */
+    progress: (done: number, total: number) =>
+      `Tu as répondu à ${done} catégorie${done > 1 ? 's' : ''} sur ${total}.`,
+    upToDate: 'Tu es à jour 🎉',
+    upToDateWithMissing: (names: string[]) =>
+      names.length === 1
+        ? `Tu es à jour 🎉 — il manque encore ${names[0]}.`
+        : `Tu es à jour 🎉 — il manque encore ${names.slice(0, -1).join(', ')} et ${names.at(-1)}.`,
+    continue: 'Continuer à voter',
+    seeResults: 'Voir le récap',
+    statusToVote: 'À voter',
+    statusVoted: 'Voté',
+    statusClosed: 'Clôturée',
+    options: (count: number) =>
+      count === 0
+        ? 'Aucune proposition'
+        : count === 1
+          ? '1 proposition'
+          : `${count} propositions`,
+    participation: (voted: number, total: number) => `${voted}/${total} ont répondu`,
+    leader: (title: string) => `En tête : ${title}`,
+    noOptionsYet: 'Personne n’a encore rien proposé ici.',
+    organizerNudge:
+      'Aucune proposition pour l’instant. Ouvre une catégorie et lance la première.',
+    settings: 'Réglages',
+  },
+
+  /** Barre de navigation basse, entre catégories. */
+  categoryNav: {
+    previous: 'Précédent',
+    next: 'Suivant',
+    position: (index: number, total: number) => `${index}/${total}`,
+    backToHub: 'Toutes les catégories',
+    ariaLabel: 'Navigation entre les catégories',
+  },
+
+  /** `/mine` — les sondages vus depuis cet appareil. */
+  myTrips: {
+    title: 'Mes sondages',
+    subtitle: 'Les sondages ouverts depuis ce téléphone ou ce navigateur.',
+    empty: 'Aucun sondage sur cet appareil pour l’instant.',
+    emptyHint:
+      'Les sondages créés ou rejoints avant aujourd’hui n’y sont pas : cette liste commence maintenant.',
+    forget: 'Retirer de la liste',
+    forgetLabel: (title: string) => `Retirer ${title} de la liste`,
+    localOnly: 'Cette liste ne quitte jamais cet appareil.',
+  },
+
+  /** É7 partiel — réglages des catégories (le reste arrive au sprint 7). */
+  categorySettings: {
+    title: 'Réglages des catégories',
+    subtitle: 'Tu es l’organisateur : toi seul vois cet écran.',
+    labelField: 'Nom de la catégorie',
+    modeField: 'Comment on vote',
+    maxChoicesField: 'Nombre de choix maximum',
+    maxChoicesHint: 'Laisse vide pour ne pas plafonner.',
+    allowOptions: 'Les participants peuvent proposer',
+    allowOptionsHint:
+      'Décoché, seul toi peux ajouter des propositions dans cette catégorie.',
+    moveUp: 'Monter',
+    moveDown: 'Descendre',
+    moveUpLabel: (label: string) => `Monter ${label}`,
+    moveDownLabel: (label: string) => `Descendre ${label}`,
+    save: 'Enregistrer',
+    saving: 'Enregistrement…',
+    saved: 'Enregistré',
+    votesWarning:
+      'Des votes existent déjà ici. Changer le mode ne les efface pas, mais ils peuvent devenir incohérents — par exemple plusieurs choix dans une catégorie passée en choix unique.',
+    restSoon: 'Le titre du sondage, les participants et la clôture arrivent au sprint 7.',
+    errorLabelRequired: 'Donne un nom à la catégorie.',
+    errorMaxChoices: 'Indique un nombre supérieur à zéro.',
   },
 
   /** Écrans pas encore construits — remplacés au fil des sprints. */
