@@ -37,10 +37,11 @@ test.describe('hub multi-catégories', () => {
     await pageMarie.getByRole('checkbox', { name: labels.categories.lodging }).check()
     await pageMarie.getByRole('checkbox', { name: labels.categories.activity }).check()
 
-    // Les catégories sans écran restent hors de portée : la carte est là,
-    // mais on ne peut pas la cocher.
+    // Une catégorie dont l'écran n'existe pas encore reste hors de portée :
+    // la carte est là, mais on ne peut pas la cocher. Depuis le sprint 4,
+    // Dates est cochable — seul Budget attend encore son écran (sprint 6).
     await expect(
-      pageMarie.getByRole('checkbox', { name: labels.categories.dates }),
+      pageMarie.getByRole('checkbox', { name: labels.categories.budget }),
     ).toBeDisabled()
 
     await pageMarie.getByRole('button', { name: labels.create.submit }).click()
