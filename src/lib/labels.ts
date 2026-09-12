@@ -295,6 +295,22 @@ export const labels = {
     errorMaxChoices: 'Indique un nombre supérieur à zéro.',
   },
 
+  /** Zone sensible de l'écran de réglages (doc 05 §5.3 É7). */
+  danger: {
+    title: 'Zone sensible',
+    deleteCta: 'Supprimer ce sondage',
+    dialogTitle: 'Supprimer définitivement ce sondage ?',
+    /** Dire ce qui part, pour tout le monde, et que rien ne revient. */
+    consequences:
+      'Le sondage, ses catégories, toutes les propositions et tous les votes seront effacés — pour toi comme pour les autres participants. Le lien cessera de fonctionner. Cette action est définitive : il n’y a pas de corbeille.',
+    confirmPrompt: (title: string) => `Pour confirmer, écris le titre du sondage : ${title}`,
+    confirmLabel: 'Titre du sondage',
+    cancel: 'Annuler',
+    confirm: 'Supprimer définitivement',
+    deleting: 'Suppression…',
+    mismatch: 'Le titre ne correspond pas.',
+  },
+
   /** Écrans pas encore construits — remplacés au fil des sprints. */
   soon: {
     badge: 'Bientôt',

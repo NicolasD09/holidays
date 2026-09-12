@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useTripContext } from '@/app/layouts/tripContext'
 import { NotFoundPage } from '@/app/pages/NotFoundPage'
 import { PageShell } from '@/components/common/PageShell'
@@ -19,6 +19,7 @@ import { useVote } from '@/features/voting/hooks/useVote'
 import { toUserMessage } from '@/lib/errors'
 import { labels } from '@/lib/labels'
 import { qk } from '@/lib/queryKeys'
+import { routes } from '@/lib/routes'
 import type { ApprovalValue, Option, OptionResult, Participant } from '@/types/domain'
 
 /**
@@ -168,9 +169,21 @@ export function CategoryPage() {
   return (
     <PageShell className="flex flex-col gap-6 pb-28">
       <header className="flex flex-col gap-1">
-        <p className="text-sm text-text-muted">
-          {preview.cover_emoji} {preview.title}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm text-text-muted">
+            {preview.cover_emoji} {preview.title}
+          </p>
+          {/*
+            Seule entrée vers les réglages quand le sondage n'a qu'une
+            catégorie : le hub redirige alors, et sans ce lien l'organisateur
+            n'aurait aucun chemin vers la zone sensible.
+          */}
+          {participant.is_organizer ? (
+            <Button asChild variant="link" className="shrink-0">
+              <Link to={routes.settings(slug)}>{labels.hub.settings}</Link>
+            </Button>
+          ) : null}
+        </div>
         <h1 className="text-2xl font-semibold">{category.label}</h1>
         {category.description ? <p className="text-text-muted">{category.description}</p> : null}
       </header>

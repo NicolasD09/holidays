@@ -32,6 +32,9 @@ const messages: Record<string, string> = {
   max_choices_reached: 'Tu as déjà utilisé tous tes choix ici. Retire-en un pour en ajouter un autre.',
 
   blind_mode_active: 'Vote d’abord : les résultats s’affichent ensuite.',
+
+  trip_delete_refused:
+    'Le sondage n’a pas été supprimé : seul son organisateur peut le faire, depuis l’appareil qui l’a créé.',
 }
 
 /** Message utilisateur pour une erreur venue de Supabase, du réseau ou du code. */

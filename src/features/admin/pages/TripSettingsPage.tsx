@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { useTripContext } from '@/app/layouts/tripContext'
 import { PageShell } from '@/components/common/PageShell'
 import { ErrorState } from '@/components/common/StateBlock'
@@ -9,12 +9,15 @@ import {
   updateCategory,
   type CategoryPatch,
 } from '@/features/admin/api/updateCategory'
+import { deleteTrip } from '@/features/admin/api/deleteTrip'
 import { CategorySettingsCard } from '@/features/admin/components/CategorySettingsCard'
+import { DangerZone } from '@/features/admin/components/DangerZone'
 import { fetchTripProgress } from '@/features/trip/api/tripProgress'
 import { toUserMessage } from '@/lib/errors'
 import { labels } from '@/lib/labels'
 import { qk } from '@/lib/queryKeys'
 import { routes } from '@/lib/routes'
+import { forgetTrip } from '@/lib/visitedTrips'
 
 /**
  * É7, partie « catégories » (tâche 2.5). Le reste de l'écran de réglages —
@@ -28,6 +31,7 @@ import { routes } from '@/lib/routes'
 export function TripSettingsPage() {
   const { slug, preview, participant, categories } = useTripContext()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const progress = useQuery({
     queryKey: qk.progress(preview.trip_id),
@@ -58,6 +62,17 @@ export function TripSettingsPage() {
     onSuccess: invalidate,
   })
 
+  const remove = useMutation({
+    mutationFn: () => deleteTrip(preview.trip_id),
+    onSuccess: () => {
+      // Le sondage n'existe plus : purger le cache avant de naviguer évite
+      // qu'un écran se remonte une seconde sur des données fantômes.
+      forgetTrip(slug)
+      queryClient.removeQueries({ queryKey: qk.trip(slug) })
+      void navigate(routes.home, { replace: true })
+    },
+  })
+
   if (!participant.is_organizer) {
     return (
       <PageShell>
@@ -74,7 +89,7 @@ export function TripSettingsPage() {
     )
   }
 
-  const pending = save.isPending || move.isPending
+  const pending = save.isPending || move.isPending || remove.isPending
 
   return (
     <PageShell className="flex flex-col gap-6">
@@ -83,9 +98,9 @@ export function TripSettingsPage() {
         <p className="text-text-muted">{labels.categorySettings.subtitle}</p>
       </header>
 
-      {save.isError || move.isError ? (
+      {save.isError || move.isError || remove.isError ? (
         <p role="alert" className="text-sm text-no">
-          {toUserMessage(save.error ?? move.error)}
+          {toUserMessage(save.error ?? move.error ?? remove.error)}
         </p>
       ) : null}
 
@@ -109,6 +124,12 @@ export function TripSettingsPage() {
       <Button asChild variant="outline" className="self-start">
         <Link to={routes.trip(slug)}>{labels.categoryNav.backToHub}</Link>
       </Button>
+
+      <DangerZone
+        tripTitle={preview.title}
+        pending={remove.isPending}
+        onDelete={() => remove.mutate()}
+      />
     </PageShell>
   )
 }
