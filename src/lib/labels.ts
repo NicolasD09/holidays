@@ -204,7 +204,6 @@ export const labels = {
           : `Il te reste ${left} choix.`,
     blindNotice: 'Vote à l’aveugle : les résultats apparaîtront après ton vote.',
     resort: 'Reclasser',
-    closed: 'Cette catégorie est clôturée. Les votes n’y sont plus modifiables.',
     progress: (voted: number, total: number) =>
       `Tu t’es prononcé sur ${voted} proposition${voted > 1 ? 's' : ''} sur ${total}.`,
     allVoted: 'Tu t’es prononcé sur tout 🎉',
@@ -389,6 +388,75 @@ export const labels = {
     settings: 'Réglages',
   },
 
+  /** Clôture d'une catégorie (tâches 5.1 et 5.2). */
+  closure: {
+    closeCta: 'Clôturer cette catégorie',
+    reopenCta: 'Rouvrir la catégorie',
+    reopening: 'Réouverture…',
+    decided: 'Décidé',
+    decidedLine: (text: string) => `Décidé : ${text}`,
+    /** Une catégorie clôturée avant la migration 9 n'a pas de décision écrite. */
+    closedWithoutDecision: 'Cette catégorie est clôturée.',
+    readOnly: 'Les votes n’y sont plus modifiables.',
+    dialogTitle: (label: string) => `Clôturer « ${label} » ?`,
+    /** Dire qui tranche, et que ça se défait. */
+    dialogBody:
+      'Tu tranches pour le groupe : la catégorie passe en lecture seule et ta décision s’affiche partout. Tu pourras la rouvrir.',
+    /** Factuel : un nombre, jamais de prénom, jamais de retard (ADR-009). */
+    nonVoters: (count: number) =>
+      count === 1
+        ? '1 personne ne s’est pas encore prononcée ici.'
+        : `${count} personnes ne se sont pas encore prononcées ici.`,
+    pickLegend: 'Ce qui est décidé',
+    leading: 'En tête',
+    blindHint:
+      'Vote à l’aveugle : tu n’as pas encore voté ici, donc tu ne vois pas les scores. Choisis librement.',
+    nothingToPick: 'Rien à retenir dans la liste : écris ce que vous avez décidé.',
+    other: 'Autre chose…',
+    otherLabel: 'Ce que vous avez décidé',
+    otherPlaceholder: 'On en reparle au retour',
+    amountLabel: 'Le budget retenu, par personne',
+    amountHint: (text: string) => `Le résumé du groupe : ${text}`,
+    cancel: 'Annuler',
+    confirm: 'Clôturer',
+    closing: 'Clôture…',
+  },
+
+  /** É6 — récapitulatif partageable (tâche 5.4). */
+  recap: {
+    title: 'Le récap',
+    allDecided: 'C’est décidé 🎉',
+    progress: (decided: number, total: number) =>
+      decided === 0
+        ? 'Rien n’est encore tranché. Voici où en est le groupe.'
+        : `${decided} décision${decided > 1 ? 's' : ''} sur ${total}. Voici où en est le groupe.`,
+    summaryLabel: 'En résumé',
+    inProgress: 'En cours',
+    leading: (text: string) => `En tête pour l’instant : ${text}`,
+    noLeader: 'Rien ne se dégage pour l’instant.',
+    voters: (names: string[]) =>
+      names.length === 0
+        ? 'Personne ne s’est encore prononcé.'
+        : names.length === 1
+          ? `${names[0]} s’est prononcé.`
+          : `${names.slice(0, -1).join(', ')} et ${names.at(-1)} se sont prononcés.`,
+    budgetVoters: (count: number) =>
+      count === 0
+        ? 'Personne n’a encore donné son budget.'
+        : count === 1
+          ? '1 personne a donné son budget.'
+          : `${count} personnes ont donné leur budget.`,
+    fullRanking: 'Voir le classement complet',
+    rankingEmpty: 'Aucune proposition.',
+    openCategory: 'Ouvrir la catégorie',
+    share: 'Partager le récap',
+    shareCopied: 'Récap copié',
+    backToTrip: 'Revenir au sondage',
+    /** Message partagé : le titre, le bandeau, le lien. */
+    shareMessage: (emoji: string, title: string, line: string) =>
+      line ? `${emoji} ${title}\n${line}` : `${emoji} ${title}`,
+  },
+
   /** Barre de navigation basse, entre catégories. */
   categoryNav: {
     previous: 'Précédent',
@@ -410,7 +478,25 @@ export const labels = {
     localOnly: 'Cette liste ne quitte jamais cet appareil.',
   },
 
-  /** É7 partiel — réglages des catégories (le reste arrive au sprint 7). */
+  /** É7 — le sondage lui-même (tâche 5.5). */
+  tripSettings: {
+    title: 'Réglages',
+    sectionTrip: 'Le sondage',
+    titleField: 'Titre',
+    emojiField: 'Emoji de couverture',
+    descriptionField: 'Description (facultatif)',
+    descriptionPlaceholder: 'Une semaine en juillet, à huit, pas trop loin.',
+    blindMode: 'Vote à l’aveugle',
+    blindModeHint:
+      'Chacun ne voit les résultats d’une catégorie qu’après y avoir voté. Les votes déjà exprimés restent tels quels.',
+    save: 'Enregistrer',
+    saving: 'Enregistrement…',
+    saved: 'Enregistré',
+    errorTitleRequired: 'Donne un titre au sondage.',
+    sectionCategories: 'Les catégories',
+  },
+
+  /** É7 — réglages des catégories. */
   categorySettings: {
     title: 'Réglages des catégories',
     subtitle: 'Tu es l’organisateur : toi seul vois cet écran.',
@@ -430,7 +516,14 @@ export const labels = {
     saved: 'Enregistré',
     votesWarning:
       'Des votes existent déjà ici. Changer le mode ne les efface pas, mais ils peuvent devenir incohérents — par exemple plusieurs choix dans une catégorie passée en choix unique.',
-    restSoon: 'Le titre du sondage, les participants et la clôture arrivent au sprint 7.',
+    descriptionField: 'Précision (facultatif)',
+    descriptionHint: 'Affichée sous le titre de la catégorie.',
+    budgetScopeHint: 'Ce que couvre le montant — « par personne, hors transport ».',
+    windowField: 'Période de recherche',
+    windowHint:
+      'Réduire la période n’efface aucune disponibilité : les jours qui en sortent sont mis de côté, et reviennent si tu l’élargis à nouveau.',
+    closedLocked: 'Catégorie clôturée : rouvre-la pour modifier sa période.',
+    errorDescriptionTooLong: (max: number) => `${max} caractères maximum.`,
     errorLabelRequired: 'Donne un nom à la catégorie.',
     errorMaxChoices: 'Indique un nombre supérieur à zéro.',
     fixedMode: 'Le fonctionnement de cette catégorie est fixé par son type.',
@@ -456,8 +549,6 @@ export const labels = {
   soon: {
     badge: 'Bientôt',
     body: 'Cet écran arrive dans un prochain sprint.',
-    results: 'Le récapitulatif arrive au sprint 7.',
-    settings: 'Les réglages arrivent au sprint 7.',
     myTrips: 'La liste de tes sondages arrive au sprint 3.',
   },
 } as const

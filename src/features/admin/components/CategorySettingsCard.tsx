@@ -2,8 +2,13 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { CategoryPatch } from '@/features/admin/api/updateCategory'
-import { selectableVoteModes } from '@/features/trip/components/category-catalogue'
-import { categoryEmoji } from '@/features/trip/components/category-catalogue'
+import {
+  BUDGET_SCOPE_MAX,
+  categoryEmoji,
+  type DatesConfig,
+  selectableVoteModes,
+  validateDatesConfig,
+} from '@/features/trip/components/category-catalogue'
 import { labels } from '@/lib/labels'
 import type { Category, VoteMode } from '@/types/domain'
 
@@ -16,6 +21,15 @@ import type { Category, VoteMode } from '@/types/domain'
  * dans une catégorie passée en choix unique. Supprimer des votes serait
  * irréversible, donc hors de ce que je décide seul (doc 08 §8.2) ; et
  * interdire le changement créerait un cul-de-sac. Prévenir laisse la main.
+ *
+ * Depuis le sprint 7, deux réglages de plus :
+ * - la **précision** de la catégorie — pour le budget, ce que couvre le
+ *   montant (dette n° 6 du doc 16) ;
+ * - la **période de recherche** d'une catégorie dates (dette n° 5 du doc 15).
+ *   La réduire n'efface rien : les jours qui en sortent dorment en base et
+ *   reviennent si on l'élargit. C'est ce qui la rend modifiable sans ton
+ *   accord. Elle se fige une fois la catégorie tranchée — le créneau retenu
+ *   pourrait en sortir.
  */
 export function CategorySettingsCard({
   category,
@@ -40,13 +54,30 @@ export function CategorySettingsCard({
     category.max_choices === null ? '' : String(category.max_choices),
   )
   const [allowOptions, setAllowOptions] = useState(category.allow_participant_options)
+  const [description, setDescription] = useState(category.description ?? '')
+  const [dates, setDates] = useState<DatesConfig>({
+    windowStart: category.window_start ?? '',
+    windowEnd: category.window_end ?? '',
+    nights: category.nights === null ? '' : String(category.nights),
+  })
   const [error, setError] = useState<string | null>(null)
+
+  const isDates = category.vote_mode === 'availability'
+  const fixedMode = isDates || category.vote_mode === 'amount'
+  const closed = category.status === 'closed'
+  const datesDirty =
+    isDates &&
+    (dates.windowStart !== (category.window_start ?? '') ||
+      dates.windowEnd !== (category.window_end ?? '') ||
+      dates.nights !== (category.nights === null ? '' : String(category.nights)))
 
   const dirty =
     label !== category.label ||
     voteMode !== category.vote_mode ||
     allowOptions !== category.allow_participant_options ||
-    (maxChoices === '' ? null : Number(maxChoices)) !== category.max_choices
+    (maxChoices === '' ? null : Number(maxChoices)) !== category.max_choices ||
+    description !== (category.description ?? '') ||
+    datesDirty
 
   function save() {
     const trimmed = label.trim()
@@ -64,8 +95,40 @@ export function CategorySettingsCard({
       }
     }
 
+    if (description.trim().length > BUDGET_SCOPE_MAX) {
+      setError(labels.categorySettings.errorDescriptionTooLong(BUDGET_SCOPE_MAX))
+      return
+    }
+
+    if (datesDirty) {
+      const problem = validateDatesConfig(dates)
+      if (problem) {
+        setError(labels.create[problem])
+        return
+      }
+    }
+
     setError(null)
+
+    // Dates et budget : ni mode, ni plafond, ni propositions à régler — la
+    // base refuse d'ailleurs de changer leur mode (migration 9).
+    if (fixedMode) {
+      onSave({
+        label: trimmed,
+        description: description.trim() || null,
+        ...(datesDirty
+          ? {
+              window_start: dates.windowStart,
+              window_end: dates.windowEnd,
+              nights: Number(dates.nights),
+            }
+          : {}),
+      })
+      return
+    }
+
     onSave({
+      description: description.trim() || null,
       label: trimmed,
       vote_mode: voteMode,
       // Le plafond n'a de sens qu'en choix multiple : changer de mode le
@@ -75,7 +138,6 @@ export function CategorySettingsCard({
     })
   }
 
-  const fixedMode = category.vote_mode === 'availability' || category.vote_mode === 'amount'
   const fieldId = (name: string) => `category-${category.id}-${name}`
 
   return (
@@ -116,6 +178,63 @@ export function CategorySettingsCard({
           onChange={(event) => setLabel(event.target.value)}
         />
       </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor={fieldId('description')} className="font-medium">
+          {labels.categorySettings.descriptionField}
+        </label>
+        <Input
+          id={fieldId('description')}
+          maxLength={BUDGET_SCOPE_MAX}
+          value={description}
+          placeholder={category.vote_mode === 'amount' ? labels.create.budgetScopePlaceholder : undefined}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+        <p className="text-sm text-text-muted">
+          {category.vote_mode === 'amount'
+            ? labels.categorySettings.budgetScopeHint
+            : labels.categorySettings.descriptionHint}
+        </p>
+      </div>
+
+      {isDates ? (
+        <fieldset className="flex flex-col gap-3" disabled={closed}>
+          <legend className="mb-2 font-medium">{labels.categorySettings.windowField}</legend>
+          <div className="flex flex-wrap gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              {labels.create.datesFrom}
+              <Input
+                type="date"
+                value={dates.windowStart}
+                onChange={(event) => setDates({ ...dates, windowStart: event.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              {labels.create.datesTo}
+              <Input
+                type="date"
+                value={dates.windowEnd}
+                onChange={(event) => setDates({ ...dates, windowEnd: event.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              {labels.create.datesNights}
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={60}
+                className="max-w-24"
+                value={dates.nights}
+                onChange={(event) => setDates({ ...dates, nights: event.target.value })}
+              />
+            </label>
+          </div>
+          <p className="text-sm text-text-muted">
+            {closed ? labels.categorySettings.closedLocked : labels.categorySettings.windowHint}
+          </p>
+        </fieldset>
+      ) : null}
 
       {/*
         Dates et budget ne se « votent » pas : leur fonctionnement découle du

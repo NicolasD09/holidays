@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router'
 import { useTripContext } from '@/app/layouts/tripContext'
 import { PageShell } from '@/components/common/PageShell'
-import { ErrorState } from '@/components/common/StateBlock'
+import { ErrorState, LoadingState } from '@/components/common/StateBlock'
 import { Button } from '@/components/ui/button'
 import {
   swapCategoryPositions,
@@ -10,8 +10,10 @@ import {
   type CategoryPatch,
 } from '@/features/admin/api/updateCategory'
 import { deleteTrip } from '@/features/admin/api/deleteTrip'
+import { fetchTripDetails, type TripPatch, updateTrip } from '@/features/admin/api/updateTrip'
 import { CategorySettingsCard } from '@/features/admin/components/CategorySettingsCard'
 import { DangerZone } from '@/features/admin/components/DangerZone'
+import { TripDetailsCard } from '@/features/admin/components/TripDetailsCard'
 import { fetchTripProgress } from '@/features/trip/api/tripProgress'
 import { toUserMessage } from '@/lib/errors'
 import { labels } from '@/lib/labels'
@@ -20,9 +22,13 @@ import { routes } from '@/lib/routes'
 import { forgetTrip } from '@/lib/visitedTrips'
 
 /**
- * É7, partie « catégories » (tâche 2.5). Le reste de l'écran de réglages —
- * titre du sondage, participants, clôture, zone sensible — arrive au
- * sprint 7 ; l'annoncer vaut mieux que de laisser croire à un oubli.
+ * É7 — réglages (tâches 2.5 et 5.5) : le sondage, ses catégories, la zone
+ * sensible.
+ *
+ * La clôture d'une catégorie ne vit pas ici mais dans la catégorie elle-même,
+ * là où l'organisateur voit les scores au moment de trancher. Les
+ * participants (renommer, fusionner) arrivent au sprint 8 avec la vie de
+ * groupe.
  *
  * L'écran n'est qu'une commodité : c'est la policy `categories_write` qui
  * refuse l'écriture à un non-organisateur. Le masquer ici évite un bouton
@@ -36,6 +42,24 @@ export function TripSettingsPage() {
   const progress = useQuery({
     queryKey: qk.progress(preview.trip_id),
     queryFn: () => fetchTripProgress(preview.trip_id, participant.id, categories),
+  })
+
+  const details = useQuery({
+    queryKey: qk.tripDetails(preview.trip_id),
+    queryFn: () => fetchTripDetails(preview.trip_id),
+    enabled: participant.is_organizer,
+  })
+
+  const saveTrip = useMutation({
+    mutationFn: (patch: TripPatch) => updateTrip(preview.trip_id, patch),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: qk.tripDetails(preview.trip_id) })
+      // Le titre et l'emoji s'affichent partout depuis l'aperçu.
+      await queryClient.invalidateQueries({ queryKey: qk.tripPreview(slug) })
+      // Le mode aveugle change ce que chaque catégorie laisse voir.
+      await queryClient.invalidateQueries({ queryKey: qk.progress(preview.trip_id) })
+      await queryClient.invalidateQueries({ queryKey: ['category'] })
+    },
   })
 
   const invalidate = async () => {
@@ -89,20 +113,42 @@ export function TripSettingsPage() {
     )
   }
 
-  const pending = save.isPending || move.isPending || remove.isPending
+  const pending = save.isPending || move.isPending || remove.isPending || saveTrip.isPending
 
   return (
     <PageShell className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{labels.categorySettings.title}</h1>
+        <h1 className="text-2xl font-semibold">{labels.tripSettings.title}</h1>
         <p className="text-text-muted">{labels.categorySettings.subtitle}</p>
       </header>
 
-      {save.isError || move.isError || remove.isError ? (
+      {save.isError || move.isError || remove.isError || saveTrip.isError ? (
         <p role="alert" className="text-sm text-no">
-          {toUserMessage(save.error ?? move.error ?? remove.error)}
+          {toUserMessage(save.error ?? move.error ?? remove.error ?? saveTrip.error)}
         </p>
       ) : null}
+
+      {details.isPending ? (
+        <LoadingState />
+      ) : details.isError ? (
+        <ErrorState
+          body={toUserMessage(details.error)}
+          action={
+            <Button onClick={() => void details.refetch()}>{labels.error.tryAgain}</Button>
+          }
+        />
+      ) : (
+        <TripDetailsCard
+          // Une nouvelle version de la ligne repart des valeurs enregistrées.
+          key={details.data.updated_at}
+          trip={details.data}
+          pending={saveTrip.isPending}
+          saved={saveTrip.isSuccess}
+          onSave={(patch) => saveTrip.mutate(patch)}
+        />
+      )}
+
+      <h2 className="text-lg font-semibold">{labels.tripSettings.sectionCategories}</h2>
 
       <div className="flex flex-col gap-4">
         {categories.map((category, index) => (
@@ -118,8 +164,6 @@ export function TripSettingsPage() {
           />
         ))}
       </div>
-
-      <p className="text-sm text-text-muted">{labels.categorySettings.restSoon}</p>
 
       <Button asChild variant="outline" className="self-start">
         <Link to={routes.trip(slug)}>{labels.categoryNav.backToHub}</Link>

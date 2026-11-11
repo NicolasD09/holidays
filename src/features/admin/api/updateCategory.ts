@@ -13,6 +13,10 @@ import type { Category, VoteMode } from '@/types/domain'
 
 export type CategoryPatch = {
   label?: string
+  description?: string | null
+  window_start?: string
+  window_end?: string
+  nights?: number
   vote_mode?: VoteMode
   max_choices?: number | null
   allow_participant_options?: boolean

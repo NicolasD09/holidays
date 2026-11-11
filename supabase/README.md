@@ -15,6 +15,7 @@ Tout ce qui protège les données du produit est ici, pas dans le front (doc 03 
 | `migrations/20260101000500_fix_slug_generation.sql` | correctif : `gen_random_bytes` invisible sur Supabase |
 | `migrations/20260101000600_availabilities.sql` | `availabilities`, `app_set_availability`, mode dates à la création |
 | `migrations/20260101000700_budget.sql` | `budget_answers` (strictement personnelle), `app_set_budget`, `app_budget_summary`, mode budget à la création |
+| `migrations/20260101000800_closure.sql` | `decisions`, `app_close_category` / `app_reopen_category`, `app_trip_participation`, `status` et `slug` hors écriture directe, off-by-one de `app_set_availability` |
 | `seed.sql` | sondage de démonstration (`/t/demo-vacances-2027`) |
 | `tests/security.test.ts` | tests de sécurité contre le vrai projet Supabase |
 | `tests/local/` | mêmes contrôles, hors ligne, sur un Postgres jetable |

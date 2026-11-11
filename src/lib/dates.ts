@@ -48,6 +48,13 @@ const dayOnlyFormatter = new Intl.DateTimeFormat('fr-FR', {
   timeZone: 'UTC',
 })
 
+/** « 10 juil. » — la forme courte du bandeau de synthèse du récap. */
+const compactFormatter = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+})
+
 const narrowWeekdayFormatter = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'narrow',
   timeZone: 'UTC',
@@ -206,4 +213,24 @@ function mondayIndex(utcDay: number): number {
 
 function emptyWeek(): CalendarWeek {
   return [null, null, null, null, null, null, null]
+}
+
+/**
+ * « 10–17 juil. », ou « 28 juin–5 juil. » à cheval sur deux mois.
+ *
+ * La forme du bandeau du récap (doc 05 §5.3 É6 : « 📅 11–18 juillet »), qui
+ * doit tenir en une ligne sur un téléphone. Partout ailleurs, `formatRange`
+ * garde les jours de la semaine — utiles pour choisir, superflus pour résumer.
+ */
+export function formatCompactRange(start: string, end: string): string {
+  const from = toUtc(start)
+  const to = toUtc(end)
+  if (Number.isNaN(from) || Number.isNaN(to)) return ''
+
+  const sameMonth =
+    new Date(from).getUTCFullYear() === new Date(to).getUTCFullYear() &&
+    new Date(from).getUTCMonth() === new Date(to).getUTCMonth()
+
+  const left = sameMonth ? String(new Date(from).getUTCDate()) : compactFormatter.format(from)
+  return `${left}\u2013${compactFormatter.format(to)}`
 }

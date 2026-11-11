@@ -183,6 +183,19 @@ export async function castVote(client: Client, optionId: string, value: number):
   await rpc(client, 'app_cast_vote', { p_option_id: optionId, p_value: value })
 }
 
+/** Clôture par la seule porte prévue — la RPC (migration 9). */
+export async function closeCategory(
+  client: Client,
+  categoryId: string,
+  optionId: string,
+): Promise<Rpc> {
+  return rpc(client, 'app_close_category', { p_category: categoryId, p_option: optionId })
+}
+
+export async function reopenCategory(client: Client, categoryId: string): Promise<Rpc> {
+  return rpc(client, 'app_reopen_category', { p_category: categoryId })
+}
+
 /** Nettoyage : l'organisateur a le droit de supprimer son sondage (cascade). */
 export async function destroyTrip(fixture: Pick<Fixture, 'client' | 'tripId'>): Promise<void> {
   await fixture.client.from('trips').delete().eq('id', fixture.tripId)

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { listParticipants } from '@/features/participant/api/listParticipants'
 import { fetchTripProgress } from '@/features/trip/api/tripProgress'
 import { CategoryCard } from '@/features/trip/components/CategoryCard'
+import { useDecisions } from '@/features/trip/hooks/useCategoryClosure'
 import { ShareSheet } from '@/features/trip/components/ShareSheet'
 import {
   countDone,
@@ -31,6 +32,11 @@ const MAX_NAMES = 3
  * entre le lien et le vote ; c'était le comportement du sprint 2, il reste
  * juste. L'URL `/t/:slug` ne change pas pour autant : un lien envoyé dans le
  * groupe avant ce sprint continue de fonctionner.
+ *
+ * **Un sondage clôturé ouvre le récap.** Quand la dernière catégorie est
+ * tranchée, le lien qu'on renvoie dans le groupe doit montrer ce qui a été
+ * décidé, pas un tableau de bord où il n'y a plus rien à faire (doc 02 §2.4,
+ * étape 5). Les catégories restent atteignables depuis le récap.
  */
 export function TripHubPage() {
   const { slug, preview, participant, categories } = useTripContext()
@@ -47,6 +53,8 @@ export function TripHubPage() {
     queryFn: () => listParticipants(preview.trip_id),
   })
 
+  const decisions = useDecisions(preview.trip_id)
+
   const only = categories.length === 1 ? categories[0] : null
 
   if (categories.length === 0) {
@@ -56,6 +64,8 @@ export function TripHubPage() {
       </PageShell>
     )
   }
+
+  if (preview.status === 'closed') return <Navigate to={routes.results(slug)} replace />
 
   if (only) return <Navigate to={routes.category(slug, only.id)} replace />
 
@@ -143,6 +153,7 @@ export function TripHubPage() {
             <CategoryCard
               category={category}
               progress={data[category.id]}
+              decision={decisions.data?.find((item) => item.categoryId === category.id) ?? null}
               slug={slug}
               participantCount={preview.participant_count}
             />
@@ -152,12 +163,12 @@ export function TripHubPage() {
 
       {/*
         Action principale ancrée en bas : c'est là que le pouce tombe
-        (doc 05 §5.1-1). Elle disparaît quand il n'y a plus rien à faire —
-        un bouton qui ne mène nulle part est pire qu'un bouton absent.
+        (doc 05 §5.1-1). Quand il ne reste rien à voter, elle devient « Voir le
+        récap » — la seule suite qui ait un sens à ce moment-là.
       */}
-      {next ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
-          <div className="mx-auto w-full max-w-[960px] px-1">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
+        <div className="mx-auto w-full max-w-[960px] px-1">
+          {next ? (
             <Button
               size="lg"
               block
@@ -165,9 +176,13 @@ export function TripHubPage() {
             >
               {labels.hub.continue}
             </Button>
-          </div>
+          ) : (
+            <Button size="lg" block onClick={() => void navigate(routes.results(slug))}>
+              {labels.hub.seeResults}
+            </Button>
+          )}
         </div>
-      ) : null}
+      </div>
 
       {participant.is_organizer ? (
         <Button asChild variant="link" className="self-start">

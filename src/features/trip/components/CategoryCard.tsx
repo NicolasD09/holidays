@@ -1,10 +1,11 @@
 import { Link } from 'react-router'
 import type { CategoryProgress } from '@/features/trip/api/tripProgress'
 import { categoryEmoji } from '@/features/trip/components/category-catalogue'
+import { describeDecision } from '@/lib/decisions'
 import { labels } from '@/lib/labels'
 import { routes } from '@/lib/routes'
 import { cn } from '@/lib/utils'
-import type { Category } from '@/types/domain'
+import type { Category, Decision } from '@/types/domain'
 
 /**
  * Une carte du hub (doc 05 §5.3 É4).
@@ -18,11 +19,14 @@ import type { Category } from '@/types/domain'
 export function CategoryCard({
   category,
   progress,
+  decision,
   slug,
   participantCount,
 }: {
   category: Category
   progress: CategoryProgress | undefined
+  /** La décision, si la catégorie est clôturée — affichée en toutes lettres. */
+  decision: Decision | null
   slug: string
   participantCount: number
 }) {
@@ -90,7 +94,11 @@ export function CategoryCard({
         </div>
       ) : null}
 
-      {isBudget ? (
+      {closed && decision ? (
+        <p className="font-semibold text-text">
+          {labels.closure.decidedLine(describeDecision(decision))}
+        </p>
+      ) : closed ? null : isBudget ? (
         <p className="text-sm text-text-muted">
           {progress?.leader
             ? labels.hub.budgetComfortable(progress.leader.title)

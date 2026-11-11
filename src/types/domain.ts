@@ -136,3 +136,41 @@ export type BudgetSummary =
       step: number
       curve: BudgetCurvePoint[]
     }
+
+/**
+ * Une décision, telle que l'écran la lit — une ligne de `decisions` dont le
+ * `payload` a été validé (migration 9). Une seule des formes est remplie :
+ *
+ * - `optionId` + `title` : une proposition, dont le titre a été recopié au
+ *   moment de trancher ;
+ * - `range` : un créneau de la catégorie dates ;
+ * - `amount` : un budget ;
+ * - `freeText` : autre chose que ce qui était sur la table.
+ */
+export type Decision = {
+  categoryId: string
+  optionId: string | null
+  title: string | null
+  range: { start: string; end: string } | null
+  amount: number | null
+  freeText: string | null
+  decidedAt: string
+}
+
+/**
+ * Ce que l'organisateur retient en clôturant. Le type dit ce qui est
+ * possible : un créneau n'existe que pour les dates, un montant que pour le
+ * budget — `app_close_category` refuse le reste.
+ */
+export type CloseChoice =
+  | { kind: 'option'; optionId: string }
+  | { kind: 'range'; start: string; end: string }
+  | { kind: 'amount'; amount: number }
+  | { kind: 'text'; text: string }
+
+/**
+ * Retour de `app_trip_participation` : par catégorie, qui s'est prononcé.
+ * Pour le budget, `respondents` est toujours vide — seul le nombre sort
+ * (ADR-006).
+ */
+export type TripParticipation = Record<string, { respondents: string[]; count: number }>

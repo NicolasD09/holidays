@@ -180,6 +180,75 @@ export type Database = {
           },
         ]
       }
+      decisions: {
+        Row: {
+          category_id: string
+          decided_at: string
+          decided_by: string | null
+          free_text: string | null
+          id: string
+          option_id: string | null
+          payload: Json
+          trip_id: string
+        }
+        Insert: {
+          category_id: string
+          decided_at?: string
+          decided_by?: string | null
+          free_text?: string | null
+          id?: string
+          option_id?: string | null
+          payload?: Json
+          trip_id: string
+        }
+        Update: {
+          category_id?: string
+          decided_at?: string
+          decided_by?: string | null
+          free_text?: string | null
+          id?: string
+          option_id?: string | null
+          payload?: Json
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "decisions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: true
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "decisions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "decisions_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "option_scores"
+            referencedColumns: ["option_id"]
+          },
+          {
+            foreignKeyName: "decisions_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "decisions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       options: {
         Row: {
           category_id: string
@@ -434,6 +503,15 @@ export type Database = {
         Returns: Json
       }
       app_category_results: { Args: { p_category: string }; Returns: Json }
+      app_close_category: {
+        Args: {
+          p_category: string
+          p_free_text?: string
+          p_option?: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
       app_create_trip: {
         Args: {
           p_categories?: Json
@@ -450,6 +528,7 @@ export type Database = {
         Args: { p_display_name: string; p_slug: string }
         Returns: Json
       }
+      app_reopen_category: { Args: { p_category: string }; Returns: Json }
       app_retract_vote: { Args: { p_option_id: string }; Returns: undefined }
       app_set_availability: {
         Args: { p_category: string; p_days: Json }
@@ -460,6 +539,7 @@ export type Database = {
         Returns: Json
       }
       app_slug_candidate: { Args: never; Returns: string }
+      app_trip_participation: { Args: { p_trip: string }; Returns: Json }
       app_trip_preview: { Args: { p_slug: string }; Returns: Json }
     }
     Enums: {
