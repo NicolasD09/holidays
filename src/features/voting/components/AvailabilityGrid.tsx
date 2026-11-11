@@ -55,7 +55,18 @@ export function AvailabilityGrid({
 }) {
   const container = useRef<HTMLDivElement>(null)
   const [brush, setBrush] = useState<Brush>('yes')
-  /** Les jours touchés par le geste en cours. `null` = aucun geste. */
+  /**
+   * Les jours touchés par le geste en cours. `null` = aucun geste.
+   *
+   * **Deux copies, et ce n'est pas une redondance.** La ref est la vérité du
+   * geste : elle est écrite dans le gestionnaire même, au moment où
+   * l'événement arrive. L'état n'est que son reflet à l'écran. Lire l'état
+   * dans `pointerup` lisait le geste **tel qu'au dernier rendu** — or un
+   * navigateur peut livrer `pointerup` avant que React ait rendu le dernier
+   * `pointermove`. WebKit le fait : la dernière case manquait alors au lot,
+   * sans erreur (E2E des dates, `mobile-safari`, 11/11).
+   */
+  const strokeRef = useRef<string[] | null>(null)
   const [stroke, setStroke] = useState<string[] | null>(null)
   const [focusDay, setFocusDay] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
@@ -83,25 +94,28 @@ export function AvailabilityGrid({
 
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setStroke([day])
+    strokeRef.current = [day]
+    setStroke(strokeRef.current)
     setFocusDay(day)
   }
 
   function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (stroke === null) return
+    const current = strokeRef.current
+    if (current === null) return
     const day = dayUnder(event)
-    if (!day) return
-    setStroke((current) =>
-      current && !current.includes(day) ? [...current, day] : current,
-    )
+    if (!day || current.includes(day)) return
+    strokeRef.current = [...current, day]
+    setStroke(strokeRef.current)
   }
 
   function onPointerEnd(event: React.PointerEvent<HTMLDivElement>) {
-    if (stroke === null) return
+    const done = strokeRef.current
+    if (done === null) return
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    commit(stroke, brush)
+    strokeRef.current = null
+    commit(done, brush)
     setStroke(null)
   }
 
