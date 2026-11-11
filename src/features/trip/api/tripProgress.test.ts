@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeAvailabilityProgress,
+  computeBudgetProgress,
   computeProgress,
   type CategoryProgress,
   type TripProgress,
 } from '@/features/trip/api/tripProgress'
-import type { Category } from '@/types/domain'
+import type { BudgetSummary, Category } from '@/types/domain'
 
 /**
  * `computeProgress` remplace une RPC d'agrégat (doc 11 §11.2). C'est donc du
@@ -170,5 +171,61 @@ describe('computeAvailabilityProgress', () => {
     const autre = datesCategory('c1', { vote_mode: 'approval', kind: 'destination' })
 
     expect(computeAvailabilityProgress([autre], painted, 'me')).toEqual({})
+  })
+})
+
+describe('computeBudgetProgress', () => {
+  const budget = datesCategory('b', {
+    kind: 'budget',
+    vote_mode: 'amount',
+    window_start: null,
+    window_end: null,
+    nights: null,
+  })
+
+  const ready: BudgetSummary = {
+    status: 'ready',
+    respondents: 4,
+    answered: true,
+    min: 700,
+    median: 900,
+    max: 1200,
+    step: 25,
+    curve: [
+      { amount: 700, followers: 4 },
+      { amount: 725, followers: 3 },
+    ],
+  }
+
+  it('compte les réponses sans jamais lister leurs auteurs', () => {
+    const progress = computeBudgetProgress([budget], { b: ready })
+
+    expect(at(progress, 'b').respondentCount).toBe(4)
+    // ADR-006 : savoir qui a répondu est déjà trop.
+    expect(at(progress, 'b').voterIds).toEqual([])
+  })
+
+  it('sait si j’ai répondu', () => {
+    const waiting: BudgetSummary = { status: 'answer_first', respondents: 2, answered: false }
+
+    expect(at(computeBudgetProgress([budget], { b: waiting }), 'b').votedByMe).toBe(false)
+    expect(at(computeBudgetProgress([budget], { b: ready }), 'b').votedByMe).toBe(true)
+  })
+
+  it('annonce le montant que tout le monde suit, une fois le résumé ouvert', () => {
+    const leader = at(computeBudgetProgress([budget], { b: ready }), 'b').leader
+
+    expect(leader?.title.replace(/\s/g, ' ')).toBe('700 €')
+  })
+
+  it('n’annonce rien sous 3 réponses', () => {
+    const few: BudgetSummary = { status: 'insufficient', respondents: 2, answered: true }
+
+    expect(at(computeBudgetProgress([budget], { b: few }), 'b').leader).toBeNull()
+  })
+
+  it('ignore les catégories qui ne sont pas un budget, et celles sans résumé', () => {
+    expect(computeBudgetProgress([datesCategory('d')], { d: ready })).toEqual({})
+    expect(computeBudgetProgress([budget], {})).toEqual({})
   })
 })

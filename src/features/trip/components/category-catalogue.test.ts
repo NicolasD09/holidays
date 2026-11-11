@@ -38,15 +38,50 @@ describe('toCategoryDrafts', () => {
     ])
   })
 
-  it('ignore les catégories dont l’écran n’existe pas encore', () => {
-    // `amount` reste refusé par `app_create_trip` jusqu'au sprint 6 : la carte
-    // budget est grisée, et rien ne doit la faire passer.
+  it('crée la catégorie budget en mode montant, sans propositions', () => {
     const selection: CategorySelection = {
       ...createDefaultSelection(),
       kinds: ['destination', 'budget'],
     }
 
-    expect(toCategoryDrafts(selection).map((d) => d.kind)).toEqual(['destination'])
+    expect(toCategoryDrafts(selection).at(-1)).toEqual({
+      kind: 'budget',
+      label: 'Budget',
+      vote_mode: 'amount',
+      // On donne un montant, on ne propose rien.
+      allow_participant_options: false,
+    })
+  })
+
+  it('joint la précision de l’organisateur au budget, rognée', () => {
+    const selection: CategorySelection = {
+      ...createDefaultSelection(),
+      kinds: ['destination', 'budget'],
+      budget: { scope: '  Par personne, hors transport ' },
+    }
+
+    expect(toCategoryDrafts(selection).at(-1)?.description).toBe('Par personne, hors transport')
+  })
+
+  it('n’envoie pas de description vide', () => {
+    const selection: CategorySelection = {
+      ...createDefaultSelection(),
+      kinds: ['destination', 'budget'],
+      budget: { scope: '   ' },
+    }
+
+    expect(toCategoryDrafts(selection).at(-1)).not.toHaveProperty('description')
+  })
+
+  it('n’envoie pas la précision budget si le budget est décoché', () => {
+    const selection: CategorySelection = {
+      ...createDefaultSelection(),
+      kinds: ['destination'],
+      budget: { scope: 'Par personne' },
+    }
+
+    expect(toCategoryDrafts(selection)).toHaveLength(1)
+    expect(toCategoryDrafts(selection)[0]).not.toHaveProperty('description')
   })
 
   it('envoie la fenêtre et les nuits avec la catégorie dates', () => {

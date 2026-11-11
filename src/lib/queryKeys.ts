@@ -24,5 +24,12 @@ export const qk = {
    * requête renvoie simplement moins de lignes.
    */
   availabilities: (categoryId: string) => ['category', categoryId, 'availabilities'] as const,
+  /**
+   * Budget : deux clés, parce que ce sont deux droits différents. `myBudget`
+   * est ma ligne, lisible par moi seul ; `budgetSummary` est l'agrégat du
+   * groupe. Les séparer évite qu'un jour l'un déborde dans l'autre.
+   */
+  myBudget: (categoryId: string) => ['category', categoryId, 'my-budget'] as const,
+  budgetSummary: (categoryId: string) => ['category', categoryId, 'budget-summary'] as const,
   comments: (optionId: string) => ['option', optionId, 'comments'] as const,
 } as const

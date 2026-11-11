@@ -22,6 +22,11 @@ export type Category = Tables<'categories'>
 export type Option = Tables<'options'>
 export type Vote = Tables<'votes'>
 export type Availability = Tables<'availabilities'>
+/**
+ * Une ligne de `budget_answers`. La RLS n'en renvoie jamais qu'une : la
+ * sienne (ADR-006).
+ */
+export type BudgetAnswer = Tables<'budget_answers'>
 
 /**
  * Valeur d'un vote en mode approbation.
@@ -104,3 +109,30 @@ export type OptionResult = {
 export type CategoryWithOptions = Category & {
   options: Option[]
 }
+
+/** Un palier de la courbe d'accessibilité : à ce montant, combien suivent. */
+export type BudgetCurvePoint = {
+  amount: number
+  followers: number
+}
+
+/**
+ * Retour de `app_budget_summary` — la seule chose qu'on sache jamais des
+ * montants des autres. Aucun prénom, aucun identifiant, sous aucun état.
+ *
+ * - `answer_first` : on n'a pas encore donné son montant ;
+ * - `insufficient` : moins de 3 réponses (RM-10) ;
+ * - `ready` : les agrégats et la courbe.
+ */
+export type BudgetSummary =
+  | { status: 'answer_first' | 'insufficient'; respondents: number; answered: boolean }
+  | {
+      status: 'ready'
+      respondents: number
+      answered: boolean
+      min: number
+      median: number
+      max: number
+      step: number
+      curve: BudgetCurvePoint[]
+    }

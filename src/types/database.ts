@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -59,6 +59,58 @@ export type Database = {
           },
           {
             foreignKeyName: "availabilities_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_answers: {
+        Row: {
+          amount: number
+          category_id: string
+          created_at: string
+          id: string
+          participant_id: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category_id: string
+          created_at?: string
+          id?: string
+          participant_id: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string
+          created_at?: string
+          id?: string
+          participant_id?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_answers_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_answers_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_answers_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
@@ -375,6 +427,7 @@ export type Database = {
       }
     }
     Functions: {
+      app_budget_summary: { Args: { p_category: string }; Returns: Json }
       app_can_see_votes: { Args: { p_category: string }; Returns: boolean }
       app_cast_vote: {
         Args: { p_option_id: string; p_value: number }
@@ -400,6 +453,10 @@ export type Database = {
       app_retract_vote: { Args: { p_option_id: string }; Returns: undefined }
       app_set_availability: {
         Args: { p_category: string; p_days: Json }
+        Returns: Json
+      }
+      app_set_budget: {
+        Args: { p_amount?: number; p_category: string }
         Returns: Json
       }
       app_slug_candidate: { Args: never; Returns: string }

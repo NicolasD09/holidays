@@ -30,9 +30,16 @@ export async function signedInDevice(): Promise<Client> {
   const client = device()
   const { error } = await client.auth.signInAnonymously()
   if (error) {
+    // Deux causes, deux remèdes : les confondre envoie chercher un réglage
+    // qui est déjà bon. Le plafond est de 30 sessions anonymes par heure et
+    // par IP — une passe de sécurité en consomme une quinzaine.
+    const rateLimited = error.status === 429 || /rate limit/i.test(error.message)
     throw new Error(
-      `Auth anonyme refusée par le projet Supabase (${error.message}). ` +
-        'Active « Anonymous sign-ins » dans Authentication → Sign In / Providers.',
+      rateLimited
+        ? `Plafond de sessions anonymes atteint (${error.message}) : 30 par heure et par IP. ` +
+            'Attends que le compteur se recharge, ou laisse la CI jouer la suite depuis ses propres IP.'
+        : `Auth anonyme refusée par le projet Supabase (${error.message}). ` +
+            'Active « Anonymous sign-ins » dans Authentication → Sign In / Providers.',
     )
   }
   return client
@@ -117,6 +124,54 @@ export async function createTrip(titles: string[] = ['Lisbonne', 'Porto']): Prom
   }
 }
 
+export type BudgetFixture = {
+  client: Client
+  tripId: string
+  slug: string
+  participantId: string
+  /** La catégorie budget (mode `amount`). */
+  categoryId: string
+}
+
+/** Un sondage Destination + Budget, créé par un appareil organisateur. */
+export async function createBudgetTrip(): Promise<BudgetFixture> {
+  const client = await signedInDevice()
+  const created = await rpc(client, 'app_create_trip', {
+    p_title: `Test budget ${crypto.randomUUID().slice(0, 8)}`,
+    p_emoji: '💶',
+    p_display_name: 'Marie',
+    p_categories: [
+      { kind: 'destination', label: 'Destination', vote_mode: 'approval' },
+      { kind: 'budget', label: 'Budget', vote_mode: 'amount' },
+    ],
+  })
+
+  const tripId = String(created.trip_id)
+  const { data, error } = await client
+    .from('categories')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('vote_mode', 'amount')
+    .single()
+  if (error) throw new Error(error.message)
+
+  return {
+    client,
+    tripId,
+    slug: String(created.slug),
+    participantId: String(created.participant_id),
+    categoryId: data.id,
+  }
+}
+
+export async function setBudget(client: Client, categoryId: string, amount: number): Promise<void> {
+  await rpc(client, 'app_set_budget', { p_category: categoryId, p_amount: amount })
+}
+
+export async function budgetSummary(client: Client, categoryId: string): Promise<Rpc> {
+  return rpc(client, 'app_budget_summary', { p_category: categoryId })
+}
+
 /** Un second appareil qui rejoint le sondage par son lien. */
 export async function joinTrip(slug: string, name: string): Promise<Client> {
   const client = await signedInDevice()
@@ -129,6 +184,6 @@ export async function castVote(client: Client, optionId: string, value: number):
 }
 
 /** Nettoyage : l'organisateur a le droit de supprimer son sondage (cascade). */
-export async function destroyTrip(fixture: Fixture): Promise<void> {
+export async function destroyTrip(fixture: Pick<Fixture, 'client' | 'tripId'>): Promise<void> {
   await fixture.client.from('trips').delete().eq('id', fixture.tripId)
 }

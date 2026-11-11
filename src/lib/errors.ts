@@ -42,6 +42,9 @@ const messages: Record<string, string> = {
   day_out_of_window: 'Ce jour est en dehors de la période de recherche.',
   invalid_availability_status: 'Cette disponibilité n’est pas valide.',
 
+  invalid_amount: 'Indique un montant entre 0 et 1 000 000 €.',
+  invalid_description: 'Cette précision est trop longue (1000 caractères maximum).',
+
   trip_delete_refused:
     'Le sondage n’a pas été supprimé : seul son organisateur peut le faire, depuis l’appareil qui l’a créé.',
 }

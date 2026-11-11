@@ -209,3 +209,44 @@ describe('catégories dates', () => {
     expect(isActionable(category('a'), { a: vide })).toBe(false)
   })
 })
+
+describe('catégories budget', () => {
+  const budget = category('b', { kind: 'budget', vote_mode: 'amount' })
+  const vide = entry({ optionCount: 0, votedByMe: false, voterIds: [], respondentCount: 0 })
+  const repondu = entry({ optionCount: 0, votedByMe: true, voterIds: [], respondentCount: 1 })
+
+  it('reste à traiter sans proposition — on y donne un montant', () => {
+    expect(isActionable(budget, { b: vide })).toBe(true)
+    expect(nextActionable([budget], { b: vide })?.id).toBe('b')
+  })
+
+  it('sort de la liste dès que j’ai répondu', () => {
+    expect(isActionable(budget, { b: repondu })).toBe(false)
+  })
+
+  it('compte dans la progression', () => {
+    expect(countDone([budget], { b: vide })).toEqual({ done: 0, total: 1 })
+    expect(countDone([budget], { b: repondu })).toEqual({ done: 1, total: 1 })
+  })
+
+  it('ne nomme jamais personne — on ignore qui a répondu, et c’est voulu', () => {
+    const people = [participant('me', 'Marie'), participant('p2', 'Thomas')]
+
+    // Sans cette exclusion, `voterIds` étant toujours vide pour un budget,
+    // tout le monde serait nommé en permanence.
+    expect(missingParticipants([budget], { b: repondu }, people, 'me')).toEqual([])
+  })
+
+  it('n’empêche pas de nommer ceux qui manquent ailleurs', () => {
+    const people = [participant('me', 'Marie'), participant('p2', 'Thomas')]
+    const destination = category('a')
+    const progress = {
+      a: entry({ optionCount: 1, votedByMe: true, voterIds: ['me'] }),
+      b: repondu,
+    }
+
+    expect(missingParticipants([destination, budget], progress, people, 'me')).toEqual([
+      'Thomas',
+    ])
+  })
+})

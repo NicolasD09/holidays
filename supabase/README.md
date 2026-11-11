@@ -13,6 +13,8 @@ Tout ce qui protège les données du produit est ici, pas dans le front (doc 03 
 | `migrations/20260101000300_rpc_voting.sql` | `app_cast_vote`, `app_retract_vote`, déclencheurs |
 | `migrations/20260101000400_views_and_results.sql` | vue `option_scores`, `app_category_results` |
 | `migrations/20260101000500_fix_slug_generation.sql` | correctif : `gen_random_bytes` invisible sur Supabase |
+| `migrations/20260101000600_availabilities.sql` | `availabilities`, `app_set_availability`, mode dates à la création |
+| `migrations/20260101000700_budget.sql` | `budget_answers` (strictement personnelle), `app_set_budget`, `app_budget_summary`, mode budget à la création |
 | `seed.sql` | sondage de démonstration (`/t/demo-vacances-2027`) |
 | `tests/security.test.ts` | tests de sécurité contre le vrai projet Supabase |
 | `tests/local/` | mêmes contrôles, hors ligne, sur un Postgres jetable |
@@ -82,10 +84,10 @@ plutôt que d'élargir le `search_path`.
 
 ## Ce qui n'est pas encore là
 
-Les tables `availabilities` (sprint 4), `budget_answers` (sprint 6), `decisions`
-(sprint 7) et `comments` (sprint 8) sont spécifiées au doc 03 mais pas créées :
-une table sans écran est une table dont personne ne vérifie la RLS.
+Les tables `decisions` (sprint 7) et `comments` (sprint 8) sont spécifiées au
+doc 03 mais pas créées : une table sans écran est une table dont personne ne
+vérifie la RLS.
 
-Conséquence directe : le test de sécurité n° 2 du doc 04 §4.7 (« le montant
-budget d'autrui est illisible, y compris pour l'organisateur ») ne peut pas
-exister avant le sprint 6. Il y est attendu au même titre que la migration.
+Le test de sécurité n° 2 du doc 04 §4.7 (« le montant budget d'autrui est
+illisible, y compris pour l'organisateur ») existe depuis le sprint 6 : section 8
+du harnais local, et bloc « 2 bis » de `tests/security.test.ts`.
