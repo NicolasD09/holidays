@@ -12,6 +12,10 @@ export const qk = {
   participants: (tripId: string) => ['trip', tripId, 'participants'] as const,
   /** Agrégat du hub : propositions, votants et meneur par catégorie. */
   progress: (tripId: string) => ['trip', tripId, 'progress'] as const,
+  /** La ligne `trips` complète — réglages seulement (mode aveugle, description). */
+  tripDetails: (tripId: string) => ['trip', tripId, 'details'] as const,
+  /** Les décisions des catégories clôturées (migration 9). */
+  decisions: (tripId: string) => ['trip', tripId, 'decisions'] as const,
   /** Ma fiche de participant sur ce sondage — l'identité de cet appareil. */
   me: (tripId: string) => ['trip', tripId, 'participants', 'me'] as const,
   options: (categoryId: string) => ['category', categoryId, 'options'] as const,

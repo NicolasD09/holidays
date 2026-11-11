@@ -99,11 +99,13 @@ test.describe('hub multi-catégories', () => {
       pageThomas.getByText(labels.hub.statusVoted, { exact: true }),
     ).toHaveCount(3)
 
-    // Plus rien à faire : l'action ancrée disparaît plutôt que de mener dans
-    // le vide.
+    // Plus rien à voter : l'action ancrée mène au récap (sprint 7).
     await expect(
       pageThomas.getByRole('button', { name: labels.hub.continue }),
     ).toHaveCount(0)
+    await expect(
+      pageThomas.getByRole('button', { name: labels.hub.seeResults }),
+    ).toBeVisible()
 
     await marie.close()
     await thomas.close()

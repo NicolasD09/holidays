@@ -45,6 +45,13 @@ const messages: Record<string, string> = {
   invalid_amount: 'Indique un montant entre 0 et 1 000 000 €.',
   invalid_description: 'Cette précision est trop longue (1000 caractères maximum).',
 
+  not_organizer: 'Seul l’organisateur du sondage peut faire ça.',
+  invalid_decision: 'Choisis ce qui est décidé, ou écris-le (200 caractères maximum).',
+  decision_out_of_window: 'Ce créneau sort de la période de recherche.',
+  vote_mode_locked: 'Le fonctionnement de cette catégorie est fixé par son type.',
+  trip_update_refused:
+    'Les réglages n’ont pas été enregistrés : seul l’organisateur peut les modifier.',
+
   trip_delete_refused:
     'Le sondage n’a pas été supprimé : seul son organisateur peut le faire, depuis l’appareil qui l’a créé.',
 }

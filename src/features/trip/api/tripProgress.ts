@@ -1,26 +1,31 @@
+import { fetchParticipation } from '@/features/trip/api/participation'
 import { fetchBudgetSummary } from '@/features/voting/api/budget'
 import { formatEuros } from '@/lib/budget'
 import { formatRange } from '@/lib/dates'
 import { rankWindows } from '@/lib/scoring'
 import { supabase } from '@/lib/supabase'
-import type { AvailabilityStatus, BudgetSummary, Category } from '@/types/domain'
+import type {
+  AvailabilityStatus,
+  BudgetSummary,
+  Category,
+  TripParticipation,
+} from '@/types/domain'
 
 /**
  * De quoi remplir le hub : par catégorie, combien de propositions, qui s'est
  * prononcé, et qui mène.
  *
- * **Pourquoi côté client.** Il n'existe pas de RPC d'agrégat de participation
- * (doc 11 §11.2), et en écrire une imposerait une migration pour un besoin
- * que deux `select` couvrent. Deux lectures suffisent pour tout le hub,
- * quelle que soit le nombre de catégories — pas de N+1.
+ * **Deux sources, deux droits.** Le *meneur* se calcule à partir des votes
+ * que cet appareil peut lire — en mode aveugle, il n'apparaît donc qu'après
+ * avoir voté, exactement comme les scores de l'écran de vote. La
+ * *participation*, elle, vient de `app_trip_participation` (migration 9) :
+ * comptée en base, elle reste juste même quand les votes d'autrui sont
+ * masqués. Jusqu'au sprint 7 elle se déduisait des votes visibles, et aurait
+ * affiché « 1/8 » chez tout le monde dès la première bascule en aveugle
+ * (dette n° 6 du doc 15).
  *
- * **Sa limite, assumée et datée.** Le décompte des votants suppose qu'on voit
- * les votes des autres. C'est vrai tant que `blind_mode` est faux, ce qui est
- * le cas partout aujourd'hui : `app_create_trip` n'a pas de paramètre pour
- * l'activer. Le jour où la bascule arrive (sprint 7), `votes_select` masquera
- * les votes d'autrui et ce compteur affichera 1/8 pour tout le monde — il
- * faudra alors une RPC `app_category_participation`. Ce n'est pas une fuite,
- * c'est un compteur qui mentirait : à solder avec la bascule, pas avant.
+ * Quatre lectures au plus pour tout le hub, quel que soit le nombre de
+ * catégories — pas de N+1.
  */
 
 export type CategoryProgress = {
@@ -227,12 +232,50 @@ export function computeBudgetProgress(
   return progress
 }
 
+/**
+ * Remplace les votants déduits des votes visibles par ceux que compte la base.
+ *
+ * Pure, et la seule à savoir que le budget fait exception : il n'y reçoit
+ * qu'un nombre, jamais d'identifiants (ADR-006).
+ */
+export function applyParticipation(
+  progress: TripProgress,
+  participation: TripParticipation,
+  categories: Category[],
+  participantId: string,
+): TripProgress {
+  const next: TripProgress = { ...progress }
+
+  for (const category of categories) {
+    const entry = participation[category.id]
+    if (!entry) continue
+
+    const current: CategoryProgress = next[category.id] ?? {
+      optionCount: 0,
+      votedByMe: false,
+      voterIds: [],
+      leader: null,
+    }
+
+    next[category.id] =
+      category.vote_mode === 'amount'
+        ? { ...current, voterIds: [], respondentCount: entry.count }
+        : {
+            ...current,
+            voterIds: entry.respondents,
+            votedByMe: entry.respondents.includes(participantId),
+          }
+  }
+
+  return next
+}
+
 export async function fetchTripProgress(
   tripId: string,
   participantId: string,
   categories: Category[],
 ): Promise<TripProgress> {
-  const [options, votes, availabilities, budgets] = await Promise.all([
+  const [options, votes, availabilities, budgets, participation] = await Promise.all([
     supabase.from('options').select('id, category_id, title').eq('trip_id', tripId),
     supabase
       .from('votes')
@@ -248,16 +291,22 @@ export async function fetchTripProgress(
     // Un appel par catégorie budget — une au plus, en pratique. Rien du tout
     // pour un sondage qui n'en a pas.
     fetchBudgetSummaries(categories),
+    fetchParticipation(tripId),
   ])
 
   if (options.error) throw options.error
   if (votes.error) throw votes.error
 
-  return {
-    ...computeProgress(options.data, votes.data, participantId),
-    ...computeAvailabilityProgress(categories, availabilities, participantId),
-    ...computeBudgetProgress(categories, budgets),
-  }
+  return applyParticipation(
+    {
+      ...computeProgress(options.data, votes.data, participantId),
+      ...computeAvailabilityProgress(categories, availabilities, participantId),
+      ...computeBudgetProgress(categories, budgets),
+    },
+    participation,
+    categories,
+    participantId,
+  )
 }
 
 async function fetchBudgetSummaries(

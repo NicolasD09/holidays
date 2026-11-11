@@ -3,6 +3,7 @@ import {
   type BudgetFixture,
   budgetSummary,
   castVote,
+  closeCategory,
   configured,
   createBudgetTrip,
   createTrip,
@@ -11,6 +12,7 @@ import {
   expectRpcToFail,
   type Fixture,
   joinTrip,
+  reopenCategory,
   setBudget,
   signedInDevice,
   supabaseUrl,
@@ -304,6 +306,18 @@ describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
       expect(message).toContain('blind_mode_active')
     })
 
+    it('compte qui a voté sans rien dire de ce qu’il a voté', async () => {
+      // La participation se compte en base (migration 9) : sans ça, le hub
+      // affichait « 0 a répondu » à qui n'avait pas encore voté.
+      const { data, error } = await guest.rpc('app_trip_participation', { p_trip: trip.tripId })
+      expect(error).toBeNull()
+
+      const entry = (data as Record<string, { respondents: string[]; count: number }>)[
+        trip.categoryId
+      ]
+      expect(entry).toEqual({ respondents: [trip.participantId], count: 1 })
+    })
+
     it('ouvre les résultats dès le premier vote, et pas avant', async () => {
       await castVote(guest, trip.optionIds[0]!, 1)
 
@@ -355,13 +369,31 @@ describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
       expect(data).toHaveLength(0)
     })
 
-    it('ne clôture pas une catégorie', async () => {
-      const { data } = await guest
+    it('ne clôture pas une catégorie, ni par la RPC ni par un update direct', async () => {
+      const message = await expectRpcToFail(guest, 'app_close_category', {
+        p_category: trip.categoryId,
+        p_option: trip.optionIds[0],
+      })
+      expect(message).toContain('not_organizer')
+
+      // Depuis la migration 9, `status` n'est plus inscriptible directement,
+      // pour personne : le refus tombe avant même la policy.
+      const { data, error } = await guest
         .from('categories')
         .update({ status: 'closed' })
         .eq('id', trip.categoryId)
         .select('id')
-      expect(data).toHaveLength(0)
+      expect(error).not.toBeNull()
+      expect(data ?? []).toHaveLength(0)
+    })
+
+    it('ne lit ni n’écrit de décision hors de la clôture', async () => {
+      const { error } = await guest.from('decisions').insert({
+        trip_id: trip.tripId,
+        category_id: trip.categoryId,
+        free_text: 'Détourné',
+      })
+      expect(error).not.toBeNull()
     })
 
     it('ne supprime pas le sondage', async () => {
@@ -410,7 +442,7 @@ describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
     })
 
     it('refuse tout vote dans une catégorie clôturée', async () => {
-      await trip.client.from('categories').update({ status: 'closed' }).eq('id', trip.categoryId)
+      await closeCategory(trip.client, trip.categoryId, trip.optionIds[0]!)
 
       const message = await expectRpcToFail(trip.client, 'app_cast_vote', {
         p_option_id: trip.optionIds[0],
@@ -418,7 +450,42 @@ describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
       })
       expect(message).toContain('category_closed')
 
-      await trip.client.from('categories').update({ status: 'open' }).eq('id', trip.categoryId)
+      await reopenCategory(trip.client, trip.categoryId)
+    })
+
+    it('même l’organisateur ne clôture pas par un update direct', async () => {
+      const { error } = await trip.client
+        .from('categories')
+        .update({ status: 'closed' })
+        .eq('id', trip.categoryId)
+      expect(error).not.toBeNull()
+
+      const { error: tripError } = await trip.client
+        .from('trips')
+        .update({ status: 'closed' })
+        .eq('id', trip.tripId)
+      expect(tripError).not.toBeNull()
+    })
+
+    it('clôturer la dernière catégorie clôture le sondage, rouvrir le rouvre', async () => {
+      const closed = await closeCategory(trip.client, trip.categoryId, trip.optionIds[0]!)
+      expect(closed.trip_status).toBe('closed')
+
+      const { data } = await trip.client
+        .from('decisions')
+        .select('option_id, payload')
+        .eq('category_id', trip.categoryId)
+        .single()
+      expect(data?.option_id).toBe(trip.optionIds[0])
+
+      const reopened = await reopenCategory(trip.client, trip.categoryId)
+      expect(reopened.trip_status).toBe('open')
+
+      const { data: gone } = await trip.client
+        .from('decisions')
+        .select('id')
+        .eq('category_id', trip.categoryId)
+      expect(gone).toHaveLength(0)
     })
 
     it('rend l’adhésion idempotente et déduplique les prénoms', async () => {

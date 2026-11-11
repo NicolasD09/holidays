@@ -111,8 +111,13 @@ select chk_lignes('non-organisateur · renommer le sondage',
   format('update trips set title = ''Détourné'' where id = %L::uuid', current_setting('t.trip')), 0);
 select chk_lignes('non-organisateur · désactiver le mode aveugle',
   format('update trips set blind_mode = false where id = %L::uuid', current_setting('t.trip')), 0);
-select chk_lignes('non-organisateur · clôturer une catégorie',
-  format('update categories set status = ''closed'' where id = %L::uuid', current_setting('t.cat')), 0);
+-- Depuis la migration 9, `status` ne s'écrit plus directement, pour personne :
+-- l'`update` brut est refusé avant même la policy, et la RPC exige d'être
+-- organisateur.
+select chk_refuse('non-organisateur · clôturer une catégorie (update direct)',
+  format('update categories set status = ''closed'' where id = %L::uuid', current_setting('t.cat')));
+select chk_refuse('non-organisateur · clôturer une catégorie (RPC)',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.cat'), current_setting('t.opt1')));
 select chk_lignes('non-organisateur · supprimer le sondage',
   format('delete from trips where id = %L::uuid', current_setting('t.trip')), 0);
 
@@ -141,12 +146,12 @@ select chk_refuse('vote · valeur hors -1/0/1',
   format('select app_cast_vote(%L::uuid, 5::smallint)', current_setting('t.opt1')));
 
 set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
-update categories set status = 'closed' where id = current_setting('t.cat')::uuid;
+select app_close_category(current_setting('t.cat')::uuid, current_setting('t.opt1')::uuid) \gset
 select chk_refuse('vote · catégorie clôturée',
   format('select app_cast_vote(%L::uuid, 1::smallint)', current_setting('t.opt1')));
 select chk_egal('clôturée · scores visibles de tous',
   app_can_see_votes(current_setting('t.cat')::uuid), true);
-update categories set status = 'open' where id = current_setting('t.cat')::uuid;
+select app_reopen_category(current_setting('t.cat')::uuid) \gset
 
 select chk_autorise('vote · retrait',
   format('select app_retract_vote(%L::uuid)', current_setting('t.opt1')));
@@ -270,7 +275,7 @@ select chk_egal('aveugle · peindre suffit à voir les autres (dette n° 4)',
 
 -- ── catégorie clôturée
 set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
-update categories set status = 'closed' where id = current_setting('t.dcat')::uuid;
+select app_close_category(current_setting('t.dcat')::uuid, p_free_text => 'Plus tard') \gset
 
 select chk_refuse('dispos · catégorie clôturée',
   format('select app_set_availability(%L::uuid, ''[{"day":"2027-07-15","status":"yes"}]''::jsonb)',
@@ -443,7 +448,7 @@ select app_set_budget(current_setting('t.bcat')::uuid, 1200) \gset
 -- ── mode aveugle et clôture : ni l'un ni l'autre n'ouvre les montants
 set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
 update trips set blind_mode = true where id = current_setting('t.btrip')::uuid;
-update categories set status = 'closed' where id = current_setting('t.bcat')::uuid;
+select app_close_category(current_setting('t.bcat')::uuid, p_payload => '{"amount": 750}'::jsonb) \gset
 
 select chk_egal('ORGANISATEUR · catégorie clôturée : toujours aucune ligne',
   (select count(*) from budget_answers where trip_id = current_setting('t.btrip')::uuid), 0::bigint);
@@ -455,6 +460,242 @@ select chk_egal('budget · clôturée : le résumé s''ouvre à qui n''a pas ré
 set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
 select chk_refuse('budget · catégorie clôturée : plus d''écriture',
   format('select app_set_budget(%L::uuid, 100)', current_setting('t.bcat')));
+
+-- ═══════════════════════════════════ 9. clôture et décisions (sprint 7)
+--
+-- Marie organise un sondage Destination + Dates + Budget ; Thomas participe ;
+-- l'intrus reste dehors. Ce qui compte : seule l'organisatrice tranche, une
+-- catégorie tranchée ne reçoit plus rien, et la participation se compte en
+-- base — juste même en mode aveugle.
+
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+
+select app_create_trip('Vacances finales', '🌍', 'Marie',
+  '[{"kind":"destination","label":"Destination","vote_mode":"approval"},
+    {"kind":"dates","label":"Dates","vote_mode":"availability",
+     "window_start":"2027-07-01","window_end":"2027-07-31","nights":7},
+    {"kind":"budget","label":"Budget","vote_mode":"amount"}]'::jsonb) as f \gset
+select set_config('t.ftrip', ((:'f')::json->>'trip_id'), false),
+       set_config('t.fpid',  ((:'f')::json->>'participant_id'), false),
+       set_config('t.fslug', ((:'f')::json->>'slug'), false) \gset
+select set_config('t.fdest', (select id::text from categories
+        where trip_id = current_setting('t.ftrip')::uuid and vote_mode = 'approval'), false),
+       set_config('t.fdates', (select id::text from categories
+        where trip_id = current_setting('t.ftrip')::uuid and vote_mode = 'availability'), false),
+       set_config('t.fbud', (select id::text from categories
+        where trip_id = current_setting('t.ftrip')::uuid and vote_mode = 'amount'), false) \gset
+
+insert into options (trip_id, category_id, title, created_by, position)
+select current_setting('t.ftrip')::uuid, current_setting('t.fdest')::uuid, v.title,
+       current_setting('t.fpid')::uuid, v.pos
+from (values ('Lisbonne', 0), ('Porto', 1)) as v(title, pos);
+select set_config('t.flis', (select id::text from options
+        where category_id = current_setting('t.fdest')::uuid and title = 'Lisbonne'), false),
+       set_config('t.fpor', (select id::text from options
+        where category_id = current_setting('t.fdest')::uuid and title = 'Porto'), false) \gset
+
+-- Une proposition d'un **autre** sondage, pour tenter de trancher avec.
+select set_config('t.foreign_opt', current_setting('t.opt2'), false) \gset
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select app_join_trip(current_setting('t.fslug'), 'Thomas') \gset
+select set_config('t.fthomas', (select id::text from participants
+        where trip_id = current_setting('t.ftrip')::uuid and auth_uid = auth.uid()), false) \gset
+select app_cast_vote(current_setting('t.fpor')::uuid, 1::smallint) \gset
+select app_set_availability(current_setting('t.fdates')::uuid,
+  '[{"day":"2027-07-10","status":"yes"},{"day":"2027-07-11","status":"yes"}]'::jsonb) \gset
+
+-- ── seule l'organisatrice tranche
+select chk_refuse('clôture · un participant ne clôture pas',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdest'), current_setting('t.fpor')));
+select chk_refuse('clôture · un participant ne rouvre pas',
+  format('select app_reopen_category(%L::uuid)', current_setting('t.fdest')));
+
+set request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003';
+select chk_refuse('intrus · clôturer',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdest'), current_setting('t.fpor')));
+select chk_refuse('intrus · participation',
+  format('select app_trip_participation(%L::uuid)', current_setting('t.ftrip')));
+
+-- ── aucune porte dérobée, même pour l'organisatrice
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+select chk_refuse('ORGANISATEUR · insert direct dans decisions',
+  format('insert into decisions (trip_id, category_id, free_text) values (%L::uuid, %L::uuid, ''x'')',
+         current_setting('t.ftrip'), current_setting('t.fdest')));
+select chk_refuse('ORGANISATEUR · status d''une catégorie en update direct',
+  format('update categories set status = ''closed'' where id = %L::uuid', current_setting('t.fdest')));
+select chk_refuse('ORGANISATEUR · status du sondage en update direct',
+  format('update trips set status = ''closed'' where id = %L::uuid', current_setting('t.ftrip')));
+select chk_refuse('ORGANISATEUR · slug réécrit à la main',
+  format('update trips set slug = ''AAAAAAAAAAAAAAAA'' where id = %L::uuid', current_setting('t.ftrip')));
+select chk_lignes('ORGANISATEUR · titre et mode aveugle restent modifiables',
+  format('update trips set title = ''Vacances finales !'', blind_mode = false where id = %L::uuid',
+         current_setting('t.ftrip')), 1);
+
+-- ── une décision, une seule forme
+select chk_refuse('décision · ni proposition ni texte',
+  format('select app_close_category(%L::uuid)', current_setting('t.fdest')));
+select chk_refuse('décision · proposition ET texte',
+  format('select app_close_category(%L::uuid, %L::uuid, ''Ailleurs'')', current_setting('t.fdest'), current_setting('t.flis')));
+select chk_refuse('décision · proposition d''un autre sondage',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdest'), current_setting('t.foreign_opt')));
+select chk_refuse('décision · créneau sur une catégorie destination',
+  format('select app_close_category(%L::uuid, p_payload => ''{"start":"2027-07-10","end":"2027-07-17"}''::jsonb)',
+         current_setting('t.fdest')));
+select chk_refuse('décision · texte de plus de 200 caractères',
+  format('select app_close_category(%L::uuid, p_free_text => repeat(''x'', 201))', current_setting('t.fdest')));
+
+-- ── l'organisatrice tranche, même contre la tête de liste
+select chk_autorise('clôture · sur une proposition qui n''est pas en tête',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdest'), current_setting('t.flis')));
+select chk_egal('clôture · décision écrite, titre recopié, catégorie clôturée',
+  (select d.payload->>'title' || '/' || c.status::text || '/' || (d.decided_by::text = current_setting('t.fpid'))::text
+   from decisions d join categories c on c.id = d.category_id
+   where d.category_id = current_setting('t.fdest')::uuid),
+  'Lisbonne/closed/true');
+select chk_refuse('clôture · deux fois de suite',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdest'), current_setting('t.fpor')));
+select chk_egal('clôture · le sondage reste ouvert tant qu''une catégorie l''est',
+  (select status::text from trips where id = current_setting('t.ftrip')::uuid), 'open');
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_egal('clôture · la décision est lisible par les participants',
+  (select count(*) from decisions where trip_id = current_setting('t.ftrip')::uuid), 1::bigint);
+select chk_refuse('clôture · plus de vote, côté serveur',
+  format('select app_cast_vote(%L::uuid, 1::smallint)', current_setting('t.flis')));
+-- Sous RLS, un `delete` bloqué ne lève rien : il affecte zéro ligne.
+select chk_lignes('clôture · plus de retrait de vote non plus',
+  format('delete from votes where option_id = %L::uuid', current_setting('t.fpor')), 0);
+
+set request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003';
+select chk_egal('intrus · decisions illisibles',
+  (select count(*) from decisions where trip_id = current_setting('t.ftrip')::uuid), 0::bigint);
+
+-- ── dates et budget
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+select chk_refuse('décision dates · créneau hors fenêtre',
+  format('select app_close_category(%L::uuid, p_payload => ''{"start":"2027-06-28","end":"2027-07-05"}''::jsonb)',
+         current_setting('t.fdates')));
+select chk_refuse('décision dates · fin avant début',
+  format('select app_close_category(%L::uuid, p_payload => ''{"start":"2027-07-17","end":"2027-07-10"}''::jsonb)',
+         current_setting('t.fdates')));
+select chk_refuse('décision dates · proposition au lieu d''un créneau',
+  format('select app_close_category(%L::uuid, %L::uuid)', current_setting('t.fdates'), current_setting('t.flis')));
+select chk_refuse('décision budget · montant négatif',
+  format('select app_close_category(%L::uuid, p_payload => ''{"amount": -1}''::jsonb)', current_setting('t.fbud')));
+select chk_refuse('décision budget · montant non numérique',
+  format('select app_close_category(%L::uuid, p_payload => ''{"amount": "beaucoup"}''::jsonb)', current_setting('t.fbud')));
+
+select chk_autorise('décision dates · créneau dans la fenêtre',
+  format('select app_close_category(%L::uuid, p_payload => ''{"start":"2027-07-10","end":"2027-07-17","bruit":1}''::jsonb)',
+         current_setting('t.fdates')));
+select chk_egal('décision dates · payload normalisé',
+  (select payload from decisions where category_id = current_setting('t.fdates')::uuid),
+  '{"start": "2027-07-10", "end": "2027-07-17"}'::jsonb);
+select chk_refuse('dates clôturées · la fenêtre ne bouge plus',
+  format('update categories set window_end = ''2027-08-15'' where id = %L::uuid', current_setting('t.fdates')));
+
+select chk_egal('clôture · avant la dernière, le sondage est toujours ouvert',
+  (select status::text from trips where id = current_setting('t.ftrip')::uuid), 'open');
+select chk_autorise('décision budget · un montant',
+  format('select app_close_category(%L::uuid, p_payload => ''{"amount": 750}''::jsonb)', current_setting('t.fbud')));
+select chk_egal('clôture · la dernière catégorie clôture le sondage',
+  (select status::text from trips where id = current_setting('t.ftrip')::uuid), 'closed');
+
+-- ── rouvrir
+select chk_autorise('réouverture · par l''organisatrice',
+  format('select app_reopen_category(%L::uuid)', current_setting('t.fdest')));
+select chk_egal('réouverture · décision supprimée, catégorie et sondage rouverts',
+  (select count(*)::text || '/' ||
+          (select status::text from categories where id = current_setting('t.fdest')::uuid) || '/' ||
+          (select status::text from trips where id = current_setting('t.ftrip')::uuid)
+   from decisions where category_id = current_setting('t.fdest')::uuid),
+  '0/open/open');
+select chk_autorise('réouverture · idempotente',
+  format('select app_reopen_category(%L::uuid)', current_setting('t.fdest')));
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_autorise('réouverture · les votes redeviennent modifiables',
+  format('select app_cast_vote(%L::uuid, 0::smallint)', current_setting('t.fpor')));
+
+-- ── participation : juste même en mode aveugle
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+update trips set blind_mode = true where id = current_setting('t.ftrip')::uuid;
+
+select chk_egal('aveugle · Marie, qui n''a pas voté, ne lit aucun vote de Thomas',
+  (select count(*) from votes where category_id = current_setting('t.fdest')::uuid), 0::bigint);
+select chk_egal('aveugle · mais la participation compte Thomas',
+  (select (p->current_setting('t.fdest')->>'count') || '/' ||
+          (p->current_setting('t.fdest')->'respondents'->>0 = current_setting('t.fthomas'))::text
+   from app_trip_participation(current_setting('t.ftrip')::uuid) as p),
+  '1/true');
+select chk_egal('participation · ne renvoie que des identifiants, aucun vote',
+  (select (select array_agg(k order by k) from json_object_keys(p->current_setting('t.fdest')) as k)::text
+   from app_trip_participation(current_setting('t.ftrip')::uuid) as p),
+  '{count,respondents}');
+
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+select app_reopen_category(current_setting('t.fbud')::uuid) \gset
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select app_set_budget(current_setting('t.fbud')::uuid, 900) \gset
+select chk_egal('participation budget · un nombre, aucun identifiant (ADR-006)',
+  (select (p->current_setting('t.fbud')->>'count') || '/' ||
+          json_array_length(p->current_setting('t.fbud')->'respondents')::text
+   from app_trip_participation(current_setting('t.ftrip')::uuid) as p),
+  '1/0');
+
+-- ── cohérence d'une catégorie, désormais tenue en base
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+select app_reopen_category(current_setting('t.fdates')::uuid) \gset
+select chk_refuse('catégorie · le mode du budget ne change pas',
+  format('update categories set vote_mode = ''approval'' where id = %L::uuid', current_setting('t.fbud')));
+select chk_refuse('catégorie · une destination ne devient pas un budget',
+  format('update categories set vote_mode = ''amount'' where id = %L::uuid', current_setting('t.fdest')));
+select chk_lignes('catégorie · approbation → choix unique reste permis',
+  format('update categories set vote_mode = ''single'' where id = %L::uuid', current_setting('t.fdest')), 1);
+select chk_refuse('fenêtre · plus courte que le séjour',
+  format('update categories set window_end = ''2027-07-05'' where id = %L::uuid', current_setting('t.fdates')));
+select chk_lignes('fenêtre · réduite par l''organisatrice',
+  format('update categories set window_start = ''2027-07-12'' where id = %L::uuid', current_setting('t.fdates')), 1);
+-- Compté hors RLS : en mode aveugle, Marie ne lirait pas les jours de Thomas.
+reset role;
+select chk_egal('fenêtre · réduire ne supprime aucun jour peint',
+  (select count(*) from availabilities where category_id = current_setting('t.fdates')::uuid), 2::bigint);
+set role authenticated;
+select chk_egal('fenêtre · des jours hors fenêtre ne comptent plus dans la participation',
+  (select p->current_setting('t.fdates')->>'count'
+   from app_trip_participation(current_setting('t.ftrip')::uuid) as p), '0');
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_lignes('fenêtre · un participant ne la modifie pas',
+  format('update categories set window_start = ''2027-07-01'' where id = %L::uuid', current_setting('t.fdates')), 0);
+
+-- ── off-by-one (dette n° 2 du doc 15) : 401 jours passent, 402 non
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+update categories set window_start = '2027-01-01', window_end = '2028-02-05'
+ where id = current_setting('t.fdates')::uuid;
+select chk_egal('fenêtre maximale · 400 jours d''écart, 401 jours',
+  (select window_end - window_start + 1 from categories where id = current_setting('t.fdates')::uuid), 401);
+select chk_autorise('off-by-one · « Tout dispo » sur 401 jours passe',
+  format($q$select app_set_availability(%L::uuid,
+    (select jsonb_agg(jsonb_build_object('day', d::date, 'status', 'yes'))
+     from generate_series('2027-01-01'::date, '2028-02-05'::date, interval '1 day') d))$q$,
+    current_setting('t.fdates')));
+select chk_refuse('off-by-one · 402 jours restent refusés',
+  format($q$select app_set_availability(%L::uuid,
+    (select jsonb_agg(jsonb_build_object('day', '2027-01-01'::date, 'status', 'yes'))
+     from generate_series(1, 402)))$q$,
+    current_setting('t.fdates')));
+
+-- ── un sondage tranché se supprime quand même
+select app_close_category(current_setting('t.fdest')::uuid, current_setting('t.flis')::uuid) \gset
+select app_close_category(current_setting('t.fdates')::uuid, p_free_text => 'Juillet') \gset
+select chk_lignes('suppression · un sondage aux catégories tranchées part en entier',
+  format('delete from trips where id = %L::uuid', current_setting('t.ftrip')), 1);
+reset role;
+select chk_egal('suppression · aucune décision orpheline',
+  (select count(*) from decisions where trip_id = current_setting('t.ftrip')::uuid), 0::bigint);
+set role authenticated;
 
 -- ═══════════════════════════════════ verdict
 

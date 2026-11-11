@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCalendar,
   daysInWindow,
+  formatCompactRange,
   formatDay,
   formatRange,
   weekdayHeaders,
@@ -118,5 +119,19 @@ describe('formatRange', () => {
 
   it('ne plante pas sur une date illisible', () => {
     expect(formatRange('pas-une-date', '2027-07-17')).toBe('')
+  })
+})
+
+describe('formatCompactRange — le bandeau du récap', () => {
+  it('ne répète pas le mois dans un même mois', () => {
+    expect(formatCompactRange('2027-07-10', '2027-07-17')).toBe('10–17 juil.')
+  })
+
+  it('nomme les deux mois à cheval', () => {
+    expect(formatCompactRange('2027-06-28', '2027-07-05')).toBe('28 juin–5 juil.')
+  })
+
+  it('rend une chaîne vide sur une date invalide', () => {
+    expect(formatCompactRange('n’importe quoi', '2027-07-05')).toBe('')
   })
 })

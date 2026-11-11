@@ -14,6 +14,11 @@ export function tripUrl(slug: string, origin = window.location.origin): string {
   return new URL(routes.trip(slug), origin).toString()
 }
 
+/** Le récap a sa propre adresse : c'est elle qu'on renvoie pour clore le débat. */
+export function recapUrl(slug: string, origin = window.location.origin): string {
+  return new URL(routes.results(slug), origin).toString()
+}
+
 /** Message prêt à coller : une phrase, puis le lien. */
 export function shareMessage(title: string, url: string): string {
   return `${labels.share.message(title)}\n${url}`

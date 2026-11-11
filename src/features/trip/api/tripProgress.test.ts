@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyParticipation,
   computeAvailabilityProgress,
   computeBudgetProgress,
   computeProgress,
@@ -227,5 +228,70 @@ describe('computeBudgetProgress', () => {
   it('ignore les catégories qui ne sont pas un budget, et celles sans résumé', () => {
     expect(computeBudgetProgress([datesCategory('d')], { d: ready })).toEqual({})
     expect(computeBudgetProgress([budget], {})).toEqual({})
+  })
+})
+
+/**
+ * La participation vient de la base depuis le sprint 7 (migration 9). Le cas
+ * qui justifie tout : le mode aveugle, où les votes d'autrui sont masqués à
+ * qui n'a pas encore voté.
+ */
+describe('applyParticipation', () => {
+  const approval = datesCategory('c1', {
+    kind: 'destination',
+    vote_mode: 'approval',
+    window_start: null,
+    window_end: null,
+    nights: null,
+  })
+  const budget = datesCategory('b1', {
+    kind: 'budget',
+    vote_mode: 'amount',
+    window_start: null,
+    window_end: null,
+    nights: null,
+  })
+
+  it('compte les autres même quand leurs votes sont masqués (mode aveugle)', () => {
+    // Je n'ai pas voté : je ne lis aucun vote, donc aucun votant côté client.
+    const blind = computeProgress([{ id: 'o1', category_id: 'c1', title: 'Lisbonne' }], [], 'me')
+    expect(at(blind, 'c1').voterIds).toEqual([])
+
+    const merged = applyParticipation(
+      blind,
+      { c1: { respondents: ['p1', 'p2'], count: 2 } },
+      [approval],
+      'me',
+    )
+    expect(at(merged, 'c1').voterIds).toEqual(['p1', 'p2'])
+    expect(at(merged, 'c1').votedByMe).toBe(false)
+    // Le reste — propositions, meneur — reste ce que l'appareil peut voir.
+    expect(at(merged, 'c1').optionCount).toBe(1)
+    expect(at(merged, 'c1').leader).toBeNull()
+  })
+
+  it('me reconnaît parmi les répondants', () => {
+    const merged = applyParticipation({}, { c1: { respondents: ['me'], count: 1 } }, [approval], 'me')
+    expect(at(merged, 'c1').votedByMe).toBe(true)
+  })
+
+  it('ne donne qu’un nombre pour le budget, jamais d’identifiant (ADR-006)', () => {
+    const merged = applyParticipation(
+      computeBudgetProgress([budget], {
+        b1: { status: 'insufficient', respondents: 2, answered: true },
+      }),
+      // Même si la RPC renvoyait un jour des identifiants, on ne les garde pas.
+      { b1: { respondents: ['p1'], count: 2 } },
+      [budget],
+      'me',
+    )
+    expect(at(merged, 'b1').voterIds).toEqual([])
+    expect(at(merged, 'b1').respondentCount).toBe(2)
+    expect(at(merged, 'b1').votedByMe).toBe(true)
+  })
+
+  it('laisse intacte une catégorie absente de la participation', () => {
+    const progress = computeProgress([{ id: 'o1', category_id: 'c1', title: 'Lisbonne' }], [], 'me')
+    expect(applyParticipation(progress, {}, [approval], 'me')).toEqual(progress)
   })
 })

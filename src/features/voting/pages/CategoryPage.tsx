@@ -21,6 +21,7 @@ import { approvalLabel } from '@/features/voting/components/approval-choices'
 import { AvailabilityGrid } from '@/features/voting/components/AvailabilityGrid'
 import { AvailabilityList } from '@/features/voting/components/AvailabilityList'
 import { BudgetPanel } from '@/features/voting/components/BudgetPanel'
+import { CategoryDecision } from '@/features/voting/components/CategoryDecision'
 import { CategoryNav } from '@/features/voting/components/CategoryNav'
 import { isChoiceMode, remainingChoices } from '@/features/voting/components/choice-modes'
 import { OptionCard } from '@/features/voting/components/OptionCard'
@@ -144,6 +145,22 @@ export function CategoryPage() {
   const closedCategory = category.status === 'closed'
 
   /*
+    La décision — ou, pour l'organisateur d'une catégorie ouverte, le bouton
+    pour la prendre. Même place dans les trois écrans : sous le titre, avant
+    tout ce qui se vote (tâches 5.1 et 5.2).
+  */
+  const decisionPanel = (
+    <CategoryDecision
+      category={category}
+      categories={categories}
+      slug={slug}
+      tripId={preview.trip_id}
+      participantId={participant.id}
+      isOrganizer={participant.is_organizer}
+    />
+  )
+
+  /*
     É5b — la grille de disponibilités (doc 05 §5.3 5.b).
 
     Elle sort avant la garde de chargement du vote, qui ne la concerne pas :
@@ -173,11 +190,7 @@ export function CategoryPage() {
           ) : null}
         </header>
 
-        {closedCategory ? (
-          <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
-            {labels.voting.closed}
-          </p>
-        ) : null}
+        {decisionPanel}
 
         {from === null || to === null || nights === null ? (
           /*
@@ -273,11 +286,7 @@ export function CategoryPage() {
           ) : null}
         </header>
 
-        {closedCategory ? (
-          <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
-            {labels.voting.closed}
-          </p>
-        ) : null}
+        {decisionPanel}
 
         <BudgetPanel
           // Une instance par catégorie : le brouillon du champ ne doit pas
@@ -378,11 +387,7 @@ export function CategoryPage() {
         {category.description ? <p className="text-text-muted">{category.description}</p> : null}
       </header>
 
-      {closed ? (
-        <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
-          {labels.voting.closed}
-        </p>
-      ) : null}
+      {decisionPanel}
 
       {choiceMode && !closed ? (
         <p className="text-sm text-text-muted">
