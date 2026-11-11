@@ -75,6 +75,7 @@ export function CategorySettingsCard({
     })
   }
 
+  const fixedMode = category.vote_mode === 'availability' || category.vote_mode === 'amount'
   const fieldId = (name: string) => `category-${category.id}-${name}`
 
   return (
@@ -116,63 +117,74 @@ export function CategorySettingsCard({
         />
       </div>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="font-medium">{labels.categorySettings.modeField}</legend>
-        {selectableVoteModes.map((mode) => (
-          <label key={mode} className="flex cursor-pointer items-start gap-3 py-1">
+      {/*
+        Dates et budget ne se « votent » pas : leur fonctionnement découle du
+        type. Proposer ici « Approbation » sur un budget le casserait — plus
+        d'écran de saisie, et des montants orphelins en base.
+      */}
+      {fixedMode ? (
+        <p className="text-sm text-text-muted">{labels.categorySettings.fixedMode}</p>
+      ) : (
+        <>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="font-medium">{labels.categorySettings.modeField}</legend>
+            {selectableVoteModes.map((mode) => (
+              <label key={mode} className="flex cursor-pointer items-start gap-3 py-1">
+                <input
+                  type="radio"
+                  name={fieldId('mode')}
+                  className="mt-1 size-5 accent-[var(--color-brand)]"
+                  checked={voteMode === mode}
+                  onChange={() => setVoteMode(mode)}
+                />
+                <span className="flex flex-col">
+                  <span className="text-text">{labels.voteModes[mode].label}</span>
+                  <span className="text-sm text-text-muted">{labels.voteModes[mode].hint}</span>
+                </span>
+              </label>
+            ))}
+            {hasVotes && voteMode !== category.vote_mode ? (
+              <p role="alert" className="text-sm text-maybe">
+                {labels.categorySettings.votesWarning}
+              </p>
+            ) : null}
+          </fieldset>
+
+          {voteMode === 'multiple' ? (
+            <div className="flex flex-col gap-2">
+              <label htmlFor={fieldId('max')} className="font-medium">
+                {labels.categorySettings.maxChoicesField}
+              </label>
+              <Input
+                id={fieldId('max')}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={100}
+                className="max-w-32"
+                value={maxChoices}
+                onChange={(event) => setMaxChoices(event.target.value)}
+              />
+              <p className="text-sm text-text-muted">{labels.categorySettings.maxChoicesHint}</p>
+            </div>
+          ) : null}
+
+          <label className="flex cursor-pointer items-start gap-3">
             <input
-              type="radio"
-              name={fieldId('mode')}
+              type="checkbox"
               className="mt-1 size-5 accent-[var(--color-brand)]"
-              checked={voteMode === mode}
-              onChange={() => setVoteMode(mode)}
+              checked={allowOptions}
+              onChange={(event) => setAllowOptions(event.target.checked)}
             />
             <span className="flex flex-col">
-              <span className="text-text">{labels.voteModes[mode].label}</span>
-              <span className="text-sm text-text-muted">{labels.voteModes[mode].hint}</span>
+              <span className="text-text">{labels.categorySettings.allowOptions}</span>
+              <span className="text-sm text-text-muted">
+                {labels.categorySettings.allowOptionsHint}
+              </span>
             </span>
           </label>
-        ))}
-        {hasVotes && voteMode !== category.vote_mode ? (
-          <p role="alert" className="text-sm text-maybe">
-            {labels.categorySettings.votesWarning}
-          </p>
-        ) : null}
-      </fieldset>
-
-      {voteMode === 'multiple' ? (
-        <div className="flex flex-col gap-2">
-          <label htmlFor={fieldId('max')} className="font-medium">
-            {labels.categorySettings.maxChoicesField}
-          </label>
-          <Input
-            id={fieldId('max')}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={100}
-            className="max-w-32"
-            value={maxChoices}
-            onChange={(event) => setMaxChoices(event.target.value)}
-          />
-          <p className="text-sm text-text-muted">{labels.categorySettings.maxChoicesHint}</p>
-        </div>
-      ) : null}
-
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          className="mt-1 size-5 accent-[var(--color-brand)]"
-          checked={allowOptions}
-          onChange={(event) => setAllowOptions(event.target.checked)}
-        />
-        <span className="flex flex-col">
-          <span className="text-text">{labels.categorySettings.allowOptions}</span>
-          <span className="text-sm text-text-muted">
-            {labels.categorySettings.allowOptionsHint}
-          </span>
-        </span>
-      </label>
+        </>
+      )}
 
       {error ? (
         <p role="alert" className="text-sm text-no">

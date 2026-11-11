@@ -20,6 +20,7 @@ import { AddOptionInline } from '@/features/voting/components/AddOptionInline'
 import { approvalLabel } from '@/features/voting/components/approval-choices'
 import { AvailabilityGrid } from '@/features/voting/components/AvailabilityGrid'
 import { AvailabilityList } from '@/features/voting/components/AvailabilityList'
+import { BudgetPanel } from '@/features/voting/components/BudgetPanel'
 import { CategoryNav } from '@/features/voting/components/CategoryNav'
 import { isChoiceMode, remainingChoices } from '@/features/voting/components/choice-modes'
 import { OptionCard } from '@/features/voting/components/OptionCard'
@@ -56,23 +57,26 @@ export function CategoryPage() {
     désactivée reste `pending` pour toujours.
   */
   const isDates = category?.vote_mode === 'availability'
+  // Même logique pour le budget : ni proposition ni vote, un montant.
+  const isBudget = category?.vote_mode === 'amount'
+  const hasOptions = Boolean(category) && !isDates && !isBudget
 
   const options = useQuery({
     queryKey: qk.options(categoryId),
     queryFn: () => listOptions(categoryId),
-    enabled: Boolean(category) && !isDates,
+    enabled: hasOptions,
   })
 
   const myVotes = useQuery({
     queryKey: qk.myVotes(categoryId),
     queryFn: () => fetchMyVotes(categoryId, participant.id),
-    enabled: Boolean(category) && !isDates,
+    enabled: hasOptions,
   })
 
   const results = useQuery({
     queryKey: qk.results(categoryId),
     queryFn: () => fetchCategoryResults(categoryId),
-    enabled: Boolean(category) && !isDates,
+    enabled: hasOptions,
   })
 
   const availabilities = useQuery({
@@ -239,6 +243,51 @@ export function CategoryPage() {
             />
           </>
         )}
+
+        <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
+      </PageShell>
+    )
+  }
+
+  /*
+    É5c — le budget (doc 05 §5.3 5.c). Même sortie anticipée que les dates,
+    pour la même raison : les requêtes du vote sont éteintes ici.
+  */
+  if (isBudget) {
+    return (
+      <PageShell className="flex flex-col gap-6 pb-28">
+        <header className="flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-text-muted">
+              {preview.cover_emoji} {preview.title}
+            </p>
+            {participant.is_organizer ? (
+              <Button asChild variant="link" className="shrink-0">
+                <Link to={routes.settings(slug)}>{labels.hub.settings}</Link>
+              </Button>
+            ) : null}
+          </div>
+          <h1 className="text-2xl font-semibold">{category.label}</h1>
+          {category.description ? (
+            <p className="text-text-muted">{category.description}</p>
+          ) : null}
+        </header>
+
+        {closedCategory ? (
+          <p className="rounded-[var(--radius-card)] border border-border bg-surface-2 p-3 text-sm">
+            {labels.voting.closed}
+          </p>
+        ) : null}
+
+        <BudgetPanel
+          // Une instance par catégorie : le brouillon du champ ne doit pas
+          // suivre quelqu'un d'une catégorie budget à une autre.
+          key={categoryId}
+          categoryId={categoryId}
+          tripId={preview.trip_id}
+          participantId={participant.id}
+          closed={closedCategory}
+        />
 
         <CategoryNav slug={slug} categories={categories} currentId={categoryId} />
       </PageShell>

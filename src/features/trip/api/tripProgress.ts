@@ -1,7 +1,9 @@
+import { fetchBudgetSummary } from '@/features/voting/api/budget'
+import { formatEuros } from '@/lib/budget'
 import { formatRange } from '@/lib/dates'
 import { rankWindows } from '@/lib/scoring'
 import { supabase } from '@/lib/supabase'
-import type { AvailabilityStatus, Category } from '@/types/domain'
+import type { AvailabilityStatus, BudgetSummary, Category } from '@/types/domain'
 
 /**
  * De quoi remplir le hub : par catégorie, combien de propositions, qui s'est
@@ -31,6 +33,13 @@ export type CategoryProgress = {
    * qui manquent encore (doc 05 §5.3 É4).
    */
   voterIds: string[]
+  /**
+   * Nombre de répondants quand on ne peut pas — et ne doit pas — les nommer.
+   * Renseigné pour le budget seulement : `voterIds` y reste vide, parce que
+   * savoir **qui** a donné un montant est déjà trop (ADR-006). Quand il est
+   * là, c'est lui qui fait foi pour le décompte affiché.
+   */
+  respondentCount?: number
   /** Proposition en tête, si des votes sont visibles. */
   leader: { title: string; score: number } | null
 }
@@ -178,12 +187,52 @@ function leadingSlot(
   return { title: formatRange(best.start, best.end), score: best.score }
 }
 
+/**
+ * Ce qu'une catégorie **budget** apporte au hub.
+ *
+ * Même trou que les dates au sprint 5 (doc 14 §14.2), bouché d'emblée : ni
+ * proposition ni vote, donc invisible si on la mesurait en propositions.
+ *
+ * Trois différences avec tout le reste du hub, et elles viennent toutes
+ * d'ADR-006 :
+ * - `voterIds` reste **vide** — on ne sait pas qui a répondu, et le hub ne
+ *   nommera donc jamais personne pour le budget ;
+ * - le décompte vient de `respondentCount`, un nombre nu ;
+ * - le « meneur » est le montant que tout le monde suit, et seulement quand
+ *   le résumé est ouvert (3 réponses, et la mienne).
+ */
+export function computeBudgetProgress(
+  categories: Category[],
+  summaries: Record<string, BudgetSummary>,
+): TripProgress {
+  const progress: TripProgress = {}
+
+  for (const category of categories) {
+    if (category.vote_mode !== 'amount') continue
+    const summary = summaries[category.id]
+    if (!summary) continue
+
+    progress[category.id] = {
+      optionCount: 0,
+      votedByMe: summary.answered,
+      voterIds: [],
+      respondentCount: summary.respondents,
+      leader:
+        summary.status === 'ready'
+          ? { title: formatEuros(summary.min), score: summary.respondents }
+          : null,
+    }
+  }
+
+  return progress
+}
+
 export async function fetchTripProgress(
   tripId: string,
   participantId: string,
   categories: Category[],
 ): Promise<TripProgress> {
-  const [options, votes, availabilities] = await Promise.all([
+  const [options, votes, availabilities, budgets] = await Promise.all([
     supabase.from('options').select('id, category_id, title').eq('trip_id', tripId),
     supabase
       .from('votes')
@@ -196,6 +245,9 @@ export async function fetchTripProgress(
       tripId,
       categories.some((category) => category.vote_mode === 'availability'),
     ),
+    // Un appel par catégorie budget — une au plus, en pratique. Rien du tout
+    // pour un sondage qui n'en a pas.
+    fetchBudgetSummaries(categories),
   ])
 
   if (options.error) throw options.error
@@ -204,7 +256,20 @@ export async function fetchTripProgress(
   return {
     ...computeProgress(options.data, votes.data, participantId),
     ...computeAvailabilityProgress(categories, availabilities, participantId),
+    ...computeBudgetProgress(categories, budgets),
   }
+}
+
+async function fetchBudgetSummaries(
+  categories: Category[],
+): Promise<Record<string, BudgetSummary>> {
+  const budgetCategories = categories.filter((category) => category.vote_mode === 'amount')
+  const summaries = await Promise.all(
+    budgetCategories.map((category) => fetchBudgetSummary(category.id)),
+  )
+  return Object.fromEntries(
+    budgetCategories.map((category, index) => [category.id, summaries[index]] as const),
+  ) as Record<string, BudgetSummary>
 }
 
 async function fetchAvailabilityRows(

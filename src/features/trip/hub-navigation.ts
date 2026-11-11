@@ -29,6 +29,7 @@ export function isActionable(category: Category, progress: TripProgress): boolea
  * - **dates** : il y a toujours un calendrier à peindre, même vide. Une
  *   catégorie dates n'a aucune proposition, donc la mesurer en propositions la
  *   rendait invisible (doc 14 §14.2) ;
+ * - **budget** : même chose, il y a toujours un montant à donner ;
  * - **partout ailleurs** : sans proposition, il n'y a rien sur quoi se
  *   prononcer.
  *
@@ -38,7 +39,7 @@ function isRelevant(category: Category, progress: TripProgress): boolean {
   if (category.status === 'closed') return false
   const entry = progress[category.id]
   if (!entry) return false
-  if (category.vote_mode === 'availability') return true
+  if (category.vote_mode === 'availability' || category.vote_mode === 'amount') return true
   return entry.optionCount > 0
 }
 
@@ -76,6 +77,11 @@ export function countDone(
  * Purement informatif : le hub ne les affiche que lorsque le lecteur est
  * lui-même à jour, et sans jamais suggérer de retard. Aucun bouton de
  * relance ici — c'est le sprint 8, et il obéit à RM-15.
+ *
+ * **Le budget n'y compte jamais.** On ignore qui a donné son montant, et c'est
+ * voulu : « impossible de relancer nominativement sur le budget » est le prix
+ * accepté de la sincérité (ADR-006). Le compter ici nommerait tout le monde,
+ * toujours, faute de savoir.
  */
 export function missingParticipants(
   categories: Category[],
@@ -83,7 +89,9 @@ export function missingParticipants(
   participants: Participant[],
   meId: string,
 ): string[] {
-  const relevant = categories.filter((category) => isRelevant(category, progress))
+  const relevant = categories.filter(
+    (category) => category.vote_mode !== 'amount' && isRelevant(category, progress),
+  )
   if (relevant.length === 0) return []
 
   return participants

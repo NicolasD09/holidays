@@ -1,13 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  type BudgetFixture,
+  budgetSummary,
   castVote,
   configured,
+  createBudgetTrip,
   createTrip,
   destroyTrip,
   device,
   expectRpcToFail,
   type Fixture,
   joinTrip,
+  setBudget,
   signedInDevice,
   supabaseUrl,
 } from './helpers'
@@ -29,7 +33,7 @@ if (!configured) {
 }
 
 describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
-  const toClean: Fixture[] = []
+  const toClean: Array<Pick<Fixture, 'client' | 'tripId'>> = []
 
   afterAll(async () => {
     for (const fixture of toClean) await destroyTrip(fixture)
@@ -141,6 +145,119 @@ describe.skipIf(!configured)(`Sécurité RLS · ${supabaseUrl}`, () => {
         created_by: tripA.participantId,
       })
       expect(error).not.toBeNull()
+    })
+  })
+
+  // ───────────────────────────────────────────────────────────────── n° 2 bis
+  //
+  // Le « n° 2 » du doc 04 §4.7, dans sa numérotation : `budget_answers` d'un
+  // autre participant est illisible, **y compris pour l'organisateur**. Il
+  // ne pouvait pas exister avant la table (sprint 6).
+  describe('2 bis. Budget : le montant d’autrui est illisible, organisateur compris', () => {
+    let trip: BudgetFixture
+    let thomas: Awaited<ReturnType<typeof joinTrip>>
+    let sarah: Awaited<ReturnType<typeof joinTrip>>
+    let julien: Awaited<ReturnType<typeof joinTrip>>
+
+    beforeAll(async () => {
+      trip = await createBudgetTrip()
+      toClean.push(trip)
+      thomas = await joinTrip(trip.slug, 'Thomas')
+      sarah = await joinTrip(trip.slug, 'Sarah')
+      julien = await joinTrip(trip.slug, 'Julien')
+      await setBudget(thomas, trip.categoryId, 950)
+      await setBudget(sarah, trip.categoryId, 700)
+    })
+
+    it('l’organisateur ne lit aucune ligne de budget_answers', async () => {
+      const { data, error } = await trip.client
+        .from('budget_answers')
+        .select('*')
+        .eq('trip_id', trip.tripId)
+      expect(error).toBeNull()
+      expect(data).toHaveLength(0)
+    })
+
+    it('l’organisateur ne lit rien non plus sans aucun filtre', async () => {
+      const { data } = await trip.client.from('budget_answers').select('amount')
+      expect(data).toHaveLength(0)
+    })
+
+    it('un participant ne lit que sa propre ligne', async () => {
+      const { data } = await sarah.from('budget_answers').select('amount').eq('trip_id', trip.tripId)
+      expect(data).toEqual([{ amount: 700 }])
+    })
+
+    it('personne n’écrit directement dans la table, pas même sa propre ligne', async () => {
+      const { error } = await trip.client.from('budget_answers').insert({
+        trip_id: trip.tripId,
+        category_id: trip.categoryId,
+        participant_id: trip.participantId,
+        amount: 1,
+      })
+      expect(error).not.toBeNull()
+    })
+
+    it('l’organisateur ne modifie ni ne supprime le montant d’autrui', async () => {
+      await trip.client.from('budget_answers').update({ amount: 1 }).eq('trip_id', trip.tripId)
+      await trip.client.from('budget_answers').delete().eq('trip_id', trip.tripId)
+
+      const { data } = await thomas.from('budget_answers').select('amount')
+      expect(data).toEqual([{ amount: 950 }])
+    })
+
+    it('sans avoir répondu, l’organisateur n’obtient pas le résumé', async () => {
+      const summary = await budgetSummary(trip.client, trip.categoryId)
+      expect(summary.status).toBe('answer_first')
+      expect(summary).not.toHaveProperty('min')
+      expect(summary).not.toHaveProperty('curve')
+    })
+
+    it('à 2 réponses, le résumé ne contient aucun montant (RM-10)', async () => {
+      const summary = await budgetSummary(sarah, trip.categoryId)
+      expect(summary).toEqual({ status: 'insufficient', respondents: 2, answered: true })
+    })
+
+    it('à 3 réponses, le résumé s’ouvre — en agrégats, sans prénom ni identifiant', async () => {
+      await setBudget(julien, trip.categoryId, 1200)
+
+      const summary = await budgetSummary(julien, trip.categoryId)
+      expect(summary).toMatchObject({
+        status: 'ready',
+        respondents: 3,
+        min: 700,
+        median: 950,
+        max: 1200,
+      })
+
+      const raw = JSON.stringify(summary)
+      expect(raw).not.toMatch(/Thomas|Sarah|Julien|Marie/)
+      expect(raw).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/)
+      expect(raw).not.toContain('participant')
+    })
+
+    it('même à 3 réponses, l’organisateur ne lit toujours aucune ligne', async () => {
+      const { data } = await trip.client.from('budget_answers').select('*')
+      expect(data).toHaveLength(0)
+    })
+
+    it('un appareil étranger au sondage n’obtient ni ligne ni résumé', async () => {
+      const intruder = await signedInDevice()
+      const { data } = await intruder.from('budget_answers').select('*').eq('trip_id', trip.tripId)
+      expect(data).toHaveLength(0)
+
+      const message = await expectRpcToFail(intruder, 'app_budget_summary', {
+        p_category: trip.categoryId,
+      })
+      expect(message).toContain('not_participant')
+    })
+
+    it('refuse un montant hors bornes', async () => {
+      const message = await expectRpcToFail(thomas, 'app_set_budget', {
+        p_category: trip.categoryId,
+        p_amount: -1,
+      })
+      expect(message).toContain('invalid_amount')
     })
   })
 

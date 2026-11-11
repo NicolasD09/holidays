@@ -184,10 +184,6 @@ select chk_refuse('dates · fenêtre plus courte que le séjour',
       '[{"kind":"dates","label":"Dates","vote_mode":"availability",
          "window_start":"2027-07-01","window_end":"2027-07-05","nights":7}]'::jsonb)$q$);
 
-select chk_refuse('budget · mode amount toujours refusé',
-  $q$select app_create_trip('B', '💶', 'Marie',
-      '[{"kind":"budget","label":"Budget","vote_mode":"amount"}]'::jsonb)$q$);
-
 select app_create_trip('Vacances dates', '📅', 'Marie',
   '[{"kind":"dates","label":"Dates","vote_mode":"availability",
      "window_start":"2027-07-01","window_end":"2027-07-31","nights":7}]'::jsonb) as d \gset
@@ -279,6 +275,186 @@ update categories set status = 'closed' where id = current_setting('t.dcat')::uu
 select chk_refuse('dispos · catégorie clôturée',
   format('select app_set_availability(%L::uuid, ''[{"day":"2027-07-15","status":"yes"}]''::jsonb)',
          current_setting('t.dcat')));
+
+-- ═══════════════════════════════════ 8. budget (sprint 6)
+--
+-- Test de sécurité n° 2 du doc 04 §4.7 : le montant d'autrui est illisible,
+-- **y compris pour l'organisateur**. Marie organise ; Thomas, Sarah et Julien
+-- répondent ; l'intrus reste dehors.
+
+reset role;
+insert into auth.users (id) values
+  ('dddddddd-0000-4000-8000-000000000004'),  -- Sarah
+  ('eeeeeeee-0000-4000-8000-000000000005');  -- Julien
+
+set role authenticated;
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+
+select app_create_trip('Vacances budget', '💶', 'Marie',
+  '[{"kind":"destination","label":"Destination","vote_mode":"approval"},
+    {"kind":"budget","label":"Budget","vote_mode":"amount",
+     "description":"  Par personne, hors transport  ","allow_participant_options":true}]'::jsonb) as b \gset
+select set_config('t.btrip', ((:'b')::json->>'trip_id'), false),
+       set_config('t.bpid',  ((:'b')::json->>'participant_id'), false),
+       set_config('t.bslug', ((:'b')::json->>'slug'), false) \gset
+select set_config('t.bcat', (select id::text from categories
+        where trip_id = current_setting('t.btrip')::uuid and vote_mode = 'amount'), false),
+       set_config('t.bdest', (select id::text from categories
+        where trip_id = current_setting('t.btrip')::uuid and vote_mode = 'approval'), false) \gset
+
+select chk_egal('budget · catégorie créée, description rognée, propositions fermées',
+  (select description || '/' || allow_participant_options::text || '/' || currency
+   from categories where id = current_setting('t.bcat')::uuid),
+  'Par personne, hors transport/false/EUR');
+
+select chk_refuse('budget · description trop longue refusée',
+  format($q$select app_create_trip('B', '💶', 'Marie',
+      jsonb_build_array(jsonb_build_object('kind','budget','label','Budget',
+        'vote_mode','amount','description', repeat('x', 1001))))$q$));
+
+-- ── écriture : par la RPC, et seulement par elle
+select chk_refuse('budget · montant négatif',
+  format('select app_set_budget(%L::uuid, -1)', current_setting('t.bcat')));
+select chk_refuse('budget · montant au-delà du plafond',
+  format('select app_set_budget(%L::uuid, 1000001)', current_setting('t.bcat')));
+select chk_refuse('budget · refusé dans une catégorie qui n''est pas un budget',
+  format('select app_set_budget(%L::uuid, 500)', current_setting('t.bdest')));
+select chk_refuse('budget · résumé refusé hors catégorie budget',
+  format('select app_budget_summary(%L::uuid)', current_setting('t.bdest')));
+
+select chk_refuse('budget · insert direct refusé, même pour soi',
+  format('insert into budget_answers (trip_id, category_id, participant_id, amount)
+          values (%L::uuid, %L::uuid, %L::uuid, 500)',
+         current_setting('t.btrip'), current_setting('t.bcat'), current_setting('t.bpid')));
+
+-- ── avant de répondre : le résumé ne s'ouvre pas
+select chk_egal('budget · sans réponse, le résumé demande de répondre d''abord',
+  (select app_budget_summary(current_setting('t.bcat')::uuid)->>'status'), 'answer_first');
+
+-- ── Thomas, Sarah et Julien rejoignent et répondent
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select app_join_trip(current_setting('t.bslug'), 'Thomas') as j \gset
+select set_config('t.btpid', ((:'j')::json->>'participant_id'), false) \gset
+select app_set_budget(current_setting('t.bcat')::uuid, 900) \gset
+
+select chk_egal('budget · je relis mon propre montant',
+  (select amount from budget_answers where category_id = current_setting('t.bcat')::uuid), 900);
+
+select app_set_budget(current_setting('t.bcat')::uuid, 950) \gset
+select chk_egal('budget · une nouvelle réponse remplace la précédente',
+  (select string_agg(amount::text, ',') from budget_answers
+   where category_id = current_setting('t.bcat')::uuid), '950');
+
+select chk_egal('budget · 1 réponse : résumé insuffisant, sans aucun montant',
+  (select app_budget_summary(current_setting('t.bcat')::uuid)::text),
+  '{"status" : "insufficient", "respondents" : 1, "answered" : true}');
+
+set request.jwt.claim.sub = 'dddddddd-0000-4000-8000-000000000004';
+select app_join_trip(current_setting('t.bslug'), 'Sarah') \gset
+select app_set_budget(current_setting('t.bcat')::uuid, 700) \gset
+
+select chk_egal('budget · Sarah ne voit que sa ligne',
+  (select string_agg(amount::text, ',') from budget_answers
+   where trip_id = current_setting('t.btrip')::uuid), '700');
+
+select chk_egal('budget · 2 réponses : toujours insuffisant (RM-10)',
+  (select app_budget_summary(current_setting('t.bcat')::uuid)->>'status'), 'insufficient');
+
+-- ── l'organisatrice, à 2 réponses puis à 3 : jamais un montant d'autrui
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+
+select chk_egal('ORGANISATEUR · ne lit aucune ligne de budget_answers',
+  (select count(*) from budget_answers where trip_id = current_setting('t.btrip')::uuid), 0::bigint);
+
+select chk_egal('ORGANISATEUR · ne lit pas non plus en visant un participant',
+  (select count(*) from budget_answers
+   where participant_id = current_setting('t.btpid')::uuid), 0::bigint);
+
+-- Ici l'écriture ne « touche zéro ligne » pas : elle est refusée d'emblée,
+-- faute de `grant`. La policy n'est même pas consultée.
+select chk_refuse('ORGANISATEUR · ne modifie pas le montant d''autrui',
+  format('update budget_answers set amount = 1 where category_id = %L::uuid',
+         current_setting('t.bcat')));
+select chk_refuse('ORGANISATEUR · ne supprime pas le montant d''autrui',
+  format('delete from budget_answers where category_id = %L::uuid',
+         current_setting('t.bcat')));
+
+select chk_egal('ORGANISATEUR · sans réponse, pas de résumé non plus',
+  (select app_budget_summary(current_setting('t.bcat')::uuid)->>'status'), 'answer_first');
+
+set request.jwt.claim.sub = 'eeeeeeee-0000-4000-8000-000000000005';
+select app_join_trip(current_setting('t.bslug'), 'Julien') \gset
+select app_set_budget(current_setting('t.bcat')::uuid, 1200) \gset
+
+select chk_egal('budget · 3 réponses : résumé prêt, agrégats exacts',
+  (select (s->>'status') || '/' || (s->>'respondents') || '/' || (s->>'min') || '/' ||
+          (s->>'median') || '/' || (s->>'max') || '/' || (s->>'step')
+   from app_budget_summary(current_setting('t.bcat')::uuid) as s),
+  'ready/3/700/950/1200/25');
+
+select chk_egal('budget · la courbe part de « tout le monde suit »',
+  (select (s->'curve'->0)::text from app_budget_summary(current_setting('t.bcat')::uuid) as s),
+  '{"amount" : 700, "followers" : 3}');
+
+select chk_egal('budget · à 950 €, 2 personnes suivent ; à 975 €, une seule',
+  (select string_agg(p->>'followers', ',' order by (p->>'amount')::int)
+   from app_budget_summary(current_setting('t.bcat')::uuid) as s,
+        json_array_elements(s->'curve') as p
+   where (p->>'amount')::int in (950, 975)), '2,1');
+
+select chk_egal('budget · le résumé ne contient ni prénom ni identifiant',
+  (select s::text ~* '(participant|display_name|thomas|sarah|julien|[0-9a-f]{8}-[0-9a-f]{4})'
+   from app_budget_summary(current_setting('t.bcat')::uuid) as s), false);
+
+select chk_egal('budget · Julien ne voit toujours que sa ligne',
+  (select count(*) from budget_answers where trip_id = current_setting('t.btrip')::uuid), 1::bigint);
+
+-- ── l'intrus
+set request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003';
+select chk_egal('intrus · budget_answers',
+  (select count(*) from budget_answers where trip_id = current_setting('t.btrip')::uuid), 0::bigint);
+select chk_refuse('intrus · app_budget_summary',
+  format('select app_budget_summary(%L::uuid)', current_setting('t.bcat')));
+select chk_refuse('intrus · app_set_budget',
+  format('select app_set_budget(%L::uuid, 100)', current_setting('t.bcat')));
+
+-- ── sans session
+set role anon;
+reset request.jwt.claim.sub;
+select chk_refuse('anon · budget_answers illisible',
+  'select count(*) from budget_answers');
+select chk_refuse('anon · app_budget_summary',
+  format('select app_budget_summary(%L::uuid)', current_setting('t.bcat')));
+set role authenticated;
+
+-- ── retirer sa réponse repasse sous le seuil
+set request.jwt.claim.sub = 'eeeeeeee-0000-4000-8000-000000000005';
+select app_set_budget(current_setting('t.bcat')::uuid, null) \gset
+select chk_egal('budget · un montant nul retire la réponse',
+  (select count(*) from budget_answers where category_id = current_setting('t.bcat')::uuid), 0::bigint);
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_egal('budget · sous 3 réponses, le résumé se referme',
+  (select app_budget_summary(current_setting('t.bcat')::uuid)->>'status'), 'insufficient');
+
+set request.jwt.claim.sub = 'eeeeeeee-0000-4000-8000-000000000005';
+select app_set_budget(current_setting('t.bcat')::uuid, 1200) \gset
+
+-- ── mode aveugle et clôture : ni l'un ni l'autre n'ouvre les montants
+set request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';
+update trips set blind_mode = true where id = current_setting('t.btrip')::uuid;
+update categories set status = 'closed' where id = current_setting('t.bcat')::uuid;
+
+select chk_egal('ORGANISATEUR · catégorie clôturée : toujours aucune ligne',
+  (select count(*) from budget_answers where trip_id = current_setting('t.btrip')::uuid), 0::bigint);
+
+select chk_egal('budget · clôturée : le résumé s''ouvre à qui n''a pas répondu, en agrégat',
+  (select (s->>'status') || '/' || (s->>'answered')
+   from app_budget_summary(current_setting('t.bcat')::uuid) as s), 'ready/false');
+
+set request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002';
+select chk_refuse('budget · catégorie clôturée : plus d''écriture',
+  format('select app_set_budget(%L::uuid, 100)', current_setting('t.bcat')));
 
 -- ═══════════════════════════════════ verdict
 

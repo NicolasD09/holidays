@@ -99,7 +99,11 @@ export const labels = {
     categoryHint:
       'La destination est toujours là. Coche ce que vous voulez décider en plus.',
     categorySoon: 'Bientôt',
-    categorySoonHint: 'Le budget arrive dans un prochain sprint.',
+    budgetScopeLabel: 'Ce que couvre le budget',
+    budgetScopeField: 'Précision (facultatif)',
+    budgetScopePlaceholder: 'Par personne, hors transport',
+    budgetScopeHint:
+      'Chacun donnera son maximum. Personne ne verra le montant des autres — toi non plus.',
     datesWindowLabel: 'Entre quelles dates on cherche ?',
     datesFrom: 'À partir du',
     datesTo: 'Jusqu’au',
@@ -258,6 +262,50 @@ export const labels = {
           : `${count} personnes ont renseigné leurs disponibilités.`,
   },
 
+  /** É5c — budget (doc 05 §5.3 5.c). */
+  budget: {
+    question: 'Ton budget maximum',
+    placeholder: '750',
+    /**
+     * La promesse de confidentialité, mot pour mot celle du doc 05. Elle doit
+     * rester vraie : c'est le test de sécurité n° 2 du doc 04 §4.7 qui la
+     * tient, pas cette phrase.
+     */
+    promise:
+      'Personne ne verra ton montant, pas même l’organisateur. Seul un résumé du groupe est affiché.',
+    save: 'Enregistrer',
+    update: 'Modifier',
+    saving: 'Enregistrement…',
+    clear: 'Retirer ma réponse',
+    saved: (amount: string) => `Ton montant est enregistré : ${amount}.`,
+    errorInvalid: 'Indique un montant entier en euros, entre 0 et 1 000 000.',
+    failed: 'Impossible d’enregistrer ton montant. Vérifie ta connexion et réessaie.',
+    summaryTitle: 'Le budget du groupe',
+    answerFirst: 'Donne ton montant pour voir le résumé du groupe.',
+    insufficient: 'Le résumé s’affichera à partir de 3 réponses.',
+    comfortable: (amount: string) => `À ${amount}, tout le monde suit.`,
+    min: 'Confortable pour tous',
+    median: 'Médiane',
+    max: 'Maximum',
+    sliderLabel: 'Et à un autre montant ?',
+    /** Combien suivent — jamais qui (ADR-006). */
+    affordability: (amount: string, followers: number, total: number) =>
+      followers >= total
+        ? `À ${amount}, tout le monde suit.`
+        : followers === 0
+          ? `À ${amount}, plus personne ne suit.`
+          : followers === 1
+            ? `À ${amount}, 1 personne sur ${total} suit.`
+            : `À ${amount}, ${followers} personnes sur ${total} suivent.`,
+    /** On dit combien ont répondu, jamais qui manquerait (ADR-006, ADR-009). */
+    respondents: (count: number) =>
+      count === 0
+        ? 'Personne n’a encore donné son budget.'
+        : count === 1
+          ? '1 personne a donné son budget.'
+          : `${count} personnes ont donné leur budget.`,
+  },
+
   /** Classement des créneaux, sous la grille (doc 05 §5.3 5.b). */
   ranking: {
     title: 'Les meilleurs créneaux',
@@ -332,6 +380,10 @@ export const labels = {
     stayLength: (nights: number | null) =>
       nights === null ? 'Dates du séjour' : `Séjour de ${nights} nuit${nights > 1 ? 's' : ''}`,
     noAvailabilityYet: 'Personne n’a encore renseigné ses disponibilités.',
+    /** Catégorie budget : un montant par personne, et un résumé à partir de 3. */
+    budgetKind: 'Budget maximum de chacun',
+    budgetComfortable: (amount: string) => `À ${amount}, tout le monde suit`,
+    budgetPending: 'Le résumé s’affichera à partir de 3 réponses.',
     organizerNudge:
       'Aucune proposition pour l’instant. Ouvre une catégorie et lance la première.',
     settings: 'Réglages',
@@ -381,6 +433,7 @@ export const labels = {
     restSoon: 'Le titre du sondage, les participants et la clôture arrivent au sprint 7.',
     errorLabelRequired: 'Donne un nom à la catégorie.',
     errorMaxChoices: 'Indique un nombre supérieur à zéro.',
+    fixedMode: 'Le fonctionnement de cette catégorie est fixé par son type.',
   },
 
   /** Zone sensible de l'écran de réglages (doc 05 §5.3 É7). */

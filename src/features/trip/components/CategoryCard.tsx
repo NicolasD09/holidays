@@ -29,10 +29,12 @@ export function CategoryCard({
   const closed = category.status === 'closed'
   const voted = progress?.votedByMe ?? false
   const optionCount = progress?.optionCount ?? 0
-  const voterCount = progress?.voterIds.length ?? 0
+  // Le budget ne connaît qu'un nombre de réponses, jamais leurs auteurs.
+  const voterCount = progress?.respondentCount ?? progress?.voterIds.length ?? 0
   // Une catégorie dates n'a pas de proposition : annoncer « Aucune proposition »
   // y serait exact et totalement trompeur.
   const isDates = category.vote_mode === 'availability'
+  const isBudget = category.vote_mode === 'amount'
 
   const status = closed
     ? { text: labels.hub.statusClosed, className: 'bg-surface text-text-muted' }
@@ -65,7 +67,11 @@ export function CategoryCard({
       </div>
 
       <p className="text-sm text-text-muted">
-        {isDates ? labels.hub.stayLength(category.nights) : labels.hub.options(optionCount)}
+        {isDates
+          ? labels.hub.stayLength(category.nights)
+          : isBudget
+            ? (category.description ?? labels.hub.budgetKind)
+            : labels.hub.options(optionCount)}
         {participantCount > 0 ? (
           <> · {labels.hub.participation(voterCount, participantCount)}</>
         ) : null}
@@ -84,7 +90,13 @@ export function CategoryCard({
         </div>
       ) : null}
 
-      {progress?.leader ? (
+      {isBudget ? (
+        <p className="text-sm text-text-muted">
+          {progress?.leader
+            ? labels.hub.budgetComfortable(progress.leader.title)
+            : labels.hub.budgetPending}
+        </p>
+      ) : progress?.leader ? (
         <p className="text-sm text-text-muted">{labels.hub.leader(progress.leader.title)}</p>
       ) : isDates ? (
         <p className="text-sm text-text-muted">{labels.hub.noAvailabilityYet}</p>

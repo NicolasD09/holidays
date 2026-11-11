@@ -1,4 +1,5 @@
 import {
+  BUDGET_SCOPE_MAX,
   categoryCatalogue,
   selectableVoteModes,
   type CategorySelection,
@@ -111,8 +112,6 @@ export function CategoryPicker({
         </li>
       </ul>
 
-      <p className="text-sm text-text-muted">{labels.create.categorySoonHint}</p>
-
       {value.kinds.includes('dates') ? (
         <fieldset className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border bg-surface-2 p-4">
           <legend className="font-medium">{labels.create.datesWindowLabel}</legend>
@@ -177,6 +176,27 @@ export function CategoryPicker({
         </fieldset>
       ) : null}
 
+      {value.kinds.includes('budget') ? (
+        <fieldset className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-border bg-surface-2 p-4">
+          <legend className="font-medium">{labels.create.budgetScopeLabel}</legend>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="budget-scope" className="text-sm font-medium">
+              {labels.create.budgetScopeField}
+            </label>
+            <Input
+              id="budget-scope"
+              maxLength={BUDGET_SCOPE_MAX}
+              placeholder={labels.create.budgetScopePlaceholder}
+              value={value.budget.scope}
+              onChange={(event) =>
+                onChange({ ...value, budget: { scope: event.target.value } })
+              }
+            />
+          </div>
+          <p className="text-sm text-text-muted">{labels.create.budgetScopeHint}</p>
+        </fieldset>
+      ) : null}
+
       {value.custom.enabled ? (
         <div className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-border bg-surface-2 p-4">
           <div className="flex flex-col gap-2">
@@ -223,6 +243,17 @@ export function CategoryPicker({
             ))}
           </fieldset>
         </div>
+      ) : null}
+
+      {/*
+        Une erreur qui ne vient pas de la catégorie libre — la fenêtre de
+        dates, typiquement — n'avait nulle part où s'afficher quand celle-ci
+        était décochée : le bouton Créer ne faisait alors rien, sans un mot.
+      */}
+      {error && !value.custom.enabled ? (
+        <p role="alert" className="text-sm text-no">
+          {error}
+        </p>
       ) : null}
     </div>
   )

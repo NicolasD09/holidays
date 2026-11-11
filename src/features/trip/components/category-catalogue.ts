@@ -21,6 +21,11 @@ export type CategoryDraft = {
   window_start?: string
   window_end?: string
   nights?: number
+  /**
+   * Précision de l'organisateur. Sert aujourd'hui au budget — « par personne,
+   * hors transport » — mais `app_create_trip` l'accepte pour tout mode.
+   */
+  description?: string
 }
 
 export type CatalogueEntry = {
@@ -30,7 +35,8 @@ export type CatalogueEntry = {
   /**
    * `false` tant que l'écran de vote correspondant n'existe pas. La carte
    * reste affichée, grisée : le plan du produit se voit, et rien ne part au
-   * serveur — `app_create_trip` refuse `availability` et `amount` (doc 09).
+   * serveur. Depuis le sprint 6 toutes les catégories ont leur écran ; le
+   * drapeau reste pour la prochaine qui n'en aura pas.
    */
   available: boolean
   /** La destination ne se décoche pas : un sondage sans rien à décider n'existe pas. */
@@ -50,7 +56,7 @@ export const categoryCatalogue: CatalogueEntry[] = [
     locked: true,
   },
   { kind: 'dates', emoji: '📅', label: labels.categories.dates, available: true },
-  { kind: 'budget', emoji: '💶', label: labels.categories.budget, available: false },
+  { kind: 'budget', emoji: '💶', label: labels.categories.budget, available: true },
   { kind: 'lodging', emoji: '🏠', label: labels.categories.lodging, available: true },
   { kind: 'activity', emoji: '🎿', label: labels.categories.activity, available: true },
 ]
@@ -63,7 +69,10 @@ export function categoryEmoji(kind: CategoryKind): string {
   return categoryCatalogue.find((entry) => entry.kind === kind)?.emoji ?? '🗳️'
 }
 
-/** Les modes de vote dont l'écran existe. `availability` et `amount` viendront. */
+/**
+ * Les modes de vote qu'on **choisit**. `availability` et `amount` n'y sont
+ * pas : ils ne se choisissent pas, ils découlent du type de la catégorie.
+ */
 export const selectableVoteModes = ['approval', 'single', 'multiple'] as const
 
 export type SelectableVoteMode = (typeof selectableVoteModes)[number]
@@ -76,10 +85,19 @@ export type DatesConfig = {
   nights: string
 }
 
+export type BudgetConfig = {
+  /** Ce que couvre le montant, dans les mots de l'organisateur. Facultatif. */
+  scope: string
+}
+
+/** Longueur maximale de la précision budget — bien sous les 1000 de la table. */
+export const BUDGET_SCOPE_MAX = 200
+
 export type CategorySelection = {
   /** Types standards cochés. La destination y est toujours. */
   kinds: CategoryKind[]
   dates: DatesConfig
+  budget: BudgetConfig
   custom: {
     enabled: boolean
     label: string
@@ -103,6 +121,7 @@ export function createDefaultSelection(): CategorySelection {
   return {
     kinds: ['destination'],
     dates: defaultDatesConfig(),
+    budget: { scope: '' },
     custom: { enabled: false, label: '', voteMode: 'approval' },
   }
 }
@@ -154,6 +173,20 @@ export function toCategoryDrafts(selection: CategorySelection): CategoryDraft[] 
           window_start: selection.dates.windowStart,
           window_end: selection.dates.windowEnd,
           nights: Number(selection.dates.nights),
+        }
+      }
+
+      if (entry.kind === 'budget') {
+        const scope = selection.budget.scope.trim()
+        return {
+          kind: entry.kind,
+          label: entry.label,
+          vote_mode: 'amount' as VoteMode,
+          // On donne un montant, on ne propose rien.
+          allow_participant_options: false,
+          // Absente plutôt que vide : une description `''` s'afficherait
+          // comme une ligne blanche sous le titre.
+          ...(scope ? { description: scope } : {}),
         }
       }
 
