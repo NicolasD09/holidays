@@ -30,9 +30,16 @@ export async function signedInDevice(): Promise<Client> {
   const client = device()
   const { error } = await client.auth.signInAnonymously()
   if (error) {
+    // Deux causes, deux remèdes : les confondre envoie chercher un réglage
+    // qui est déjà bon. Le plafond est de 30 sessions anonymes par heure et
+    // par IP — une passe de sécurité en consomme une quinzaine.
+    const rateLimited = error.status === 429 || /rate limit/i.test(error.message)
     throw new Error(
-      `Auth anonyme refusée par le projet Supabase (${error.message}). ` +
-        'Active « Anonymous sign-ins » dans Authentication → Sign In / Providers.',
+      rateLimited
+        ? `Plafond de sessions anonymes atteint (${error.message}) : 30 par heure et par IP. ` +
+            'Attends que le compteur se recharge, ou laisse la CI jouer la suite depuis ses propres IP.'
+        : `Auth anonyme refusée par le projet Supabase (${error.message}). ` +
+            'Active « Anonymous sign-ins » dans Authentication → Sign In / Providers.',
     )
   }
   return client
