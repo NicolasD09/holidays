@@ -18,8 +18,13 @@ import { labels } from '../src/lib/labels'
 
 const configured = Boolean(process.env.VITE_SUPABASE_URL)
 
-/** `Intl` écrit « 1 200 € » avec des espaces insécables. */
-const montant = (texte: string) => new RegExp(texte.replace(/ /g, '\\s'))
+/**
+ * `Intl` écrit « 1 200 € » avec des espaces insécables. L'expression est
+ * **ancrée** : la carte du hub et l'écran budget disent presque la même
+ * phrase (« … tout le monde suit » contre « … tout le monde suit. »), et une
+ * sous-chaîne les confondrait.
+ */
+const montant = (texte: string) => new RegExp(`^${texte.replace(/ /g, '\\s')}$`)
 
 test.describe('budget confidentiel', () => {
   test.skip(
@@ -99,6 +104,11 @@ test.describe('budget confidentiel', () => {
 
     // ── Le hub compte, sans nommer ───────────────────────────────────────
     await pageMarie.getByRole('link', { name: labels.categoryNav.backToHub }).click()
+    // Le hub est chargé en `lazy()` : on attend d'y être avant d'y chercher
+    // quoi que ce soit, sinon on interroge encore l'écran budget.
+    await expect(
+      pageMarie.getByRole('heading', { name: 'Vacances budget E2E', level: 1 }),
+    ).toBeVisible()
     await expect(
       pageMarie.getByText(montant(labels.hub.budgetComfortable('700 €'))),
     ).toBeVisible()
